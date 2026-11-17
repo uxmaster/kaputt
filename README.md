@@ -310,7 +310,7 @@ error recovery, callbacks, and same-origin CSP.
 
 ## Credits and licenses
 
-Original kaputt contributions are licensed under [WTFPL v2](LICENSE).
+Copyright © 2026 [dr Jacek Stypuła](https://jacekstypula.pl/phd). Licensed under the WTFPL, version 2. See [LICENSE](LICENSE).
 Third-party material retains its original licenses:
 
 - Code and styles derived from [Cap](https://github.com/tiagozip/cap):
