@@ -1,10 +1,16 @@
 kaputt — CAPTCHA ist kaputt
 Copyright 2026 kaputt contributors
 
+Original kaputt contributions are licensed under WTFPL, Version 2 (LICENSE).
+Third-party material retains its original licenses, described below; it is not
+relicensed under WTFPL.
+
 The widget stylesheet and HashWX integration are derived from Cap:
 https://github.com/tiagozip/cap
 Revision: 15f8ef61edb3cd999521967caca9c0725d490782
-Copyright 2025 Tiago. Licensed under the Apache License, Version 2.0.
+Copyright 2025 Tiago. Cap-derived material retains the Apache License, Version 2.0;
+see vendor/COPYING.APACHE. This includes the copied widget stylesheet and
+Cap-derived portions of the widget markup and HashWX integration.
 Changes: HashWX-only protocol, new signed token lifecycle and public JavaScript API,
 new module worker solver, simplified widget behavior and kaputt branding.
 

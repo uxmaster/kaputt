@@ -1,3 +1,4 @@
+// Widget markup adapted from Cap (Apache-2.0); see NOTICE.
 import { solveChallenges } from './client.js';
 
 /** Cap's visual widget, with HashWX only. Configure callbacks or an application-owned endpoint.

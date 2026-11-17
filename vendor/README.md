@@ -25,5 +25,6 @@ The binary SHA-256 is pinned in `test/core.test.js`; update that pin when replac
 it and run both the unit and browser checks.
 
 HashWX is LGPL-3.0. Both the LGPL supplement (`COPYING.LESSER`) and GPL-3.0
-(`COPYING`) are included. These terms apply to HashWX; kaputt's JavaScript and
-widget CSS use Apache-2.0. See the root `NOTICE` for attribution.
+(`COPYING`) are included. These terms apply to HashWX. Cap-derived code and styles
+retain Apache-2.0 (`COPYING.APACHE`); kaputt's original contributions use WTFPL v2
+(`../LICENSE`). See the root `NOTICE` for attribution and license scope.

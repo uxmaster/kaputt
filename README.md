@@ -310,9 +310,14 @@ error recovery, callbacks, and same-origin CSP.
 
 ## Credits and licenses
 
-JavaScript and CSS: Apache-2.0, based in part on
-[Cap](https://github.com/tiagozip/cap). HashWX by
-[tevador](https://github.com/tevador/hashwx): LGPL-3.0. The original WASM is shipped
-as a separate, replaceable asset, with its complete corresponding source archive,
-build instructions, and license texts in [vendor/](vendor/README.md). See
-[NOTICE](NOTICE) and [LICENSE](LICENSE).
+Original kaputt contributions are licensed under [WTFPL v2](LICENSE).
+Third-party material retains its original licenses:
+
+- Code and styles derived from [Cap](https://github.com/tiagozip/cap):
+  [Apache-2.0](vendor/COPYING.APACHE), with attribution and change notices in [NOTICE](NOTICE).
+- [HashWX by tevador](https://github.com/tevador/hashwx):
+  [LGPL-3.0](vendor/COPYING.LESSER). Its original WASM is shipped as a separate,
+  replaceable asset, with the complete corresponding source archive, build
+  instructions, and LGPL/GPL license texts in [vendor/](vendor/README.md).
+
+WTFPL applies to kaputt's original contributions, not the third-party material.

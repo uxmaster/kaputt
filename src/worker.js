@@ -1,3 +1,4 @@
+// HashWX solver adapted from Cap (Apache-2.0); see NOTICE.
 import { createRuntime, seedFor, U64_MAX } from './hashwx.js';
 
 self.onmessage = async ({ data: { module, spec } }) => {

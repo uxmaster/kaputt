@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "CAPTCHA ist kaputt. HashWX proof of work for your Bun application.",
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "WTFPL",
   "engines": {
     "bun": ">=1.4.4"
   },
