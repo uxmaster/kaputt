@@ -210,7 +210,7 @@ Use Bun's built-in SQL client with `DATABASE_URL=mysql://user:password@localhost
 ```sql
 CREATE TABLE kaputt_used (
   nonce_key VARBINARY(64) PRIMARY KEY,
-  expires_at TIMESTAMP NOT NULL,
+  expires_at DATETIME NOT NULL,
   INDEX (expires_at)
 ) ENGINE=InnoDB;
 ```
@@ -243,8 +243,8 @@ await sql`DELETE FROM kaputt_used WHERE expires_at <= ${new Date()}`;
 ```
 
 Keeping an expired row longer is safe; it only uses space. Keep application
-clocks consistent across instances. MySQL `TIMESTAMP` uses 4 bytes at second
-precision; its date range ends in January 2038.
+clocks consistent across instances. MySQL `DATETIME` uses 5 bytes at second
+precision.
 
 ## API
 
