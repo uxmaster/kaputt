@@ -210,7 +210,7 @@ Use Bun's built-in SQL client with `DATABASE_URL=mysql://user:password@localhost
 ```sql
 CREATE TABLE kaputt_used (
   nonce_key VARBINARY(64) PRIMARY KEY,
-  expires_at BIGINT UNSIGNED NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
   INDEX (expires_at)
 ) ENGINE=InnoDB;
 ```
@@ -219,7 +219,7 @@ CREATE TABLE kaputt_used (
 import { sql, SQL } from 'bun';
 
 const consumeNonce = async (key, ttlMs) => {
-  const expires = Date.now() + ttlMs;
+  const expires = new Date(Math.ceil((Date.now() + ttlMs) / 1000) * 1000);
   try {
     await sql`
       INSERT INTO kaputt_used (nonce_key, expires_at) VALUES (${key}, ${expires})
@@ -234,15 +234,17 @@ const consumeNonce = async (key, ttlMs) => {
 
 The primary key makes the insert atomic. Only a duplicate-key error returns
 `false`; other database errors propagate and validation returns `storage_error`.
-`expires_at` stores Unix time in milliseconds, avoiding timezone conversions.
-Periodically delete expired rows:
+Expiry is rounded up to whole seconds, so a replay key is never removed before
+its required lifetime. Bun binds `Date` values in UTC and configures its MySQL
+connections to use UTC. Periodically delete expired rows:
 
 ```js
-await sql`DELETE FROM kaputt_used WHERE expires_at <= ${Date.now()}`;
+await sql`DELETE FROM kaputt_used WHERE expires_at <= ${new Date()}`;
 ```
 
 Keeping an expired row longer is safe; it only uses space. Keep application
-clocks consistent across instances.
+clocks consistent across instances. MySQL `TIMESTAMP` uses 4 bytes at second
+precision; its date range ends in January 2038.
 
 ## API
 
