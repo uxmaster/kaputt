@@ -1,0 +1,17 @@
+kaputt — CAPTCHA ist kaputt
+Copyright 2026 kaputt contributors
+
+The widget stylesheet and HashWX integration are derived from Cap:
+https://github.com/tiagozip/cap
+Revision: 15f8ef61edb3cd999521967caca9c0725d490782
+Copyright 2025 Tiago. Licensed under the Apache License, Version 2.0.
+Changes: HashWX-only protocol, new signed token lifecycle and public JavaScript API,
+new module worker solver, simplified widget behavior and kaputt branding.
+
+src/hashwx.wasm is the unmodified HashWX library by tevador, licensed under
+LGPL-3.0 (see vendor/COPYING.LESSER and vendor/COPYING).
+Copyright (c) 2020-2026 tevador <tevador@gmail.com>
+Source: https://github.com/tevador/hashwx
+Revision: 74b567a31276a4c5d7cb232a5b7639467f49f961
+Corresponding source, including build instructions: vendor/hashwx-source.tar.gz.
+The WASM library is loaded separately and can be replaced with a compatible build.

@@ -1,0 +1,35 @@
+{
+  "name": "kaputt",
+  "version": "0.1.0",
+  "description": "CAPTCHA ist kaputt. HashWX proof of work for your JavaScript application.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./widget": "./src/widget.js",
+    "./src/*": "./src/*"
+  },
+  "files": [
+    "src",
+    "examples",
+    "vendor",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:browser": "node test/browser.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uxmaster/kaputt.git"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1"
+  }
+}
