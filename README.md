@@ -2,6 +2,14 @@
 
 **CAPTCHA ist kaputt.**
 
+Bots can beat people at spotting buses, bicycles and street signs or reading
+distorted text. They can also tune their browsers to look more “human” to detection
+scripts than real users do. Privacy tools, extensions and unusual settings can
+flag legitimate visitors while bots copy the expected defaults.
+
+kaputt drops that guessing game. No puzzles or browser profiling: just verifiable
+work that makes abuse more expensive.
+
 HashWX proof of work for your own Bun application. Inspired by
 [Cap](https://github.com/tiagozip/cap), with the same widget styling and a smaller
 scope: make requests cost work. No browser instrumentation, fingerprinting,
