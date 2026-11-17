@@ -10,22 +10,22 @@ function loadModule() {
 }
 
 /** Solve HashWX in module workers, without inspecting the browser environment.
- * @param {{token: string, expires: number, challenges: import('./index.js').Puzzle[]}} challenge
+ * @param {{token: string, expires: number, ttlMs: number, challenges: import('./index.js').Puzzle[]}} challenge
  * @param {{signal?: AbortSignal, onProgress?: (percent: number) => void}} [options]
  * @returns {Promise<{token: string, solutions: {nonce: string}[]}>}
  */
 export async function solveChallenges(challenge, { signal, onProgress = () => {} } = {}) {
   if (!challenge || typeof challenge.token !== 'string' || challenge.token.length > 16384 ||
-    !integer(challenge.expires, Date.now() + 1, Date.now() + 86_400_000) ||
+    !Number.isSafeInteger(challenge.expires) || !integer(challenge.ttlMs, 1, 86_400_000) ||
     !Array.isArray(challenge.challenges) || !integer(challenge.challenges.length, 1, 64) ||
-    !challenge.challenges.every(validSpec)) throw new Error('Invalid or expired challenge');
+    !challenge.challenges.every(validSpec)) throw new Error('Invalid challenge');
   const workers = new Set();
   let timer;
   let abort;
   const stopped = new Promise((_, reject) => {
     abort = () => reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
     signal?.addEventListener('abort', abort, { once: true });
-    timer = setTimeout(() => reject(new Error('Challenge expired')), challenge.expires - Date.now());
+    timer = setTimeout(() => reject(new Error('Challenge expired')), challenge.ttlMs);
     if (signal?.aborted) abort();
   });
   try {

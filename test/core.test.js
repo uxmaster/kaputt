@@ -55,10 +55,12 @@ test('compiled runtime falls back to an interpreter when generated WASM is block
 
 test('generate, solve, redeem and consume access token once, under concurrency', async () => {
   const challenge = generateChallenge(secret, { difficulty: 64, count: 4, noncesPerHash: 16, scope: 'signup' });
+  assert.equal(challenge.ttlMs, 600_000);
   const proof = await solve(challenge);
   const results = await Promise.all(Array.from({ length: 6 }, () => validateChallenge(secret, proof, opts)));
   assert.equal(results.filter(r => r.success).length, 1);
   const result = results.find(r => r.success);
+  assert.equal(result.ttlMs, 1_200_000);
   assert.equal((await validateToken(secret, result.token, { ...opts, scope: 'login' })).success, false);
   assert.equal((await validateChallenge(secret, { token: result.token, solutions: [] }, opts)).success, false);
   assert.equal((await validateToken(secret, proof.token, opts)).success, false);
@@ -105,12 +107,14 @@ test('expired challenges and access tokens fail; expiry during storage fails', a
   const now = Date.now;
   const start = now();
   const challenge = generateChallenge(secret, { difficulty: 1, count: 1, scope: 'signup', expiresMs: 1000 });
+  assert.equal(challenge.ttlMs, 1000);
   const proof = { token: challenge.token, solutions: [{ nonce: '0' }] };
   try {
     Date.now = () => start + 2000;
     assert.equal((await validateChallenge(secret, proof, opts)).reason, 'expired');
     Date.now = () => start;
     const access = await validateChallenge(secret, proof, { ...opts, tokenTtlMs: 1000 });
+    assert.equal(access.ttlMs, 1000);
     Date.now = () => start + 2000;
     assert.equal((await validateToken(secret, access.token, opts)).reason, 'expired');
     Date.now = () => start;

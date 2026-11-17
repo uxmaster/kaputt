@@ -1,19 +1,18 @@
 // Widget markup adapted from Cap (Apache-2.0); see NOTICE.
 import { solveChallenges } from './client.js';
+import { integer } from './hashwx.js';
 
 /** Cap's visual widget, with HashWX only. Configure callbacks or an application-owned endpoint.
  * Emits progress, solve ({token, expires}), error ({message}), and reset events.
+ * @property {null|((signal: AbortSignal) => Promise<object>)} [createChallenge] Optional transport callback.
+ * @property {null|((proof: object, signal: AbortSignal) => Promise<object>)} [redeemChallenge] Optional transport callback.
  */
 export class KaputtWidget extends HTMLElement {
-  /** @type {null|((signal: AbortSignal) => Promise<object>)} */
-  createChallenge = null;
-  /** @type {null|((proof: object, signal: AbortSignal) => Promise<object>)} */
-  redeemChallenge = null;
   token = null;
   #controller;
   #pending;
   #expiry;
-  #expires = 0;
+  #deadline = 0;
   #root = this.attachShadow({ mode: 'open' });
   #box;
   #trigger;
@@ -26,7 +25,7 @@ export class KaputtWidget extends HTMLElement {
       <div class="captcha" role="group" aria-label="Kaputt proof of work">
         <button class="captcha-trigger" type="button" aria-labelledby="label">
           <div class="checkbox" part="checkbox" aria-hidden="true"><svg class="progress-ring" viewBox="0 0 32 32"><circle class="progress-ring-bg" cx="16" cy="16" r="14"></circle><circle class="progress-ring-circle" cx="16" cy="16" r="14"></circle></svg></div>
-          <p part="label" class="label-wrapper"><span id="label" class="label active" role="status" aria-live="polite">Verify to continue</span></p>
+          <p part="label" class="label-wrapper"><span id="label" class="label" role="status" aria-live="polite">Verify to continue</span></p>
         </button>
         <a class="credits" href="https://github.com/uxmaster/kaputt" target="_blank" rel="noopener" title="CAPTCHA ist kaputt">kaputt</a>
       </div>`;
@@ -44,7 +43,7 @@ export class KaputtWidget extends HTMLElement {
   disconnectedCallback() { this.reset(); }
 
   #emit(type, detail = {}) {
-    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent(type, { detail }));
   }
   #update(state, label) {
     if (state) this.#box.dataset.state = state;
@@ -65,7 +64,7 @@ export class KaputtWidget extends HTMLElement {
 
   /** Programmatically execute the same flow as clicking the widget. @returns {Promise<string>} */
   solve() {
-    if (this.token && this.#expires > Date.now()) return Promise.resolve(this.token);
+    if (this.token && this.#deadline > performance.now()) return Promise.resolve(this.token);
     if (this.token) this.reset();
     if (this.#pending) return this.#pending;
     const controller = new AbortController();
@@ -89,11 +88,11 @@ export class KaputtWidget extends HTMLElement {
       const result = await (this.redeemChallenge ? this.redeemChallenge(proof, signal) : this.#request('redeem', proof, signal));
       signal.throwIfAborted();
       if (result.success !== true || typeof result.token !== 'string' || !Number.isSafeInteger(result.expires) ||
-        result.expires <= Date.now() || result.expires - Date.now() > 86_400_000) throw new Error('Proof of work was rejected');
+        !integer(result.ttlMs, 1, 86_400_000)) throw new Error('Proof of work was rejected');
       this.token = this.#field.value = result.token;
-      this.#expires = result.expires;
+      this.#deadline = performance.now() + result.ttlMs;
       this.#update('done', 'Verified');
-      this.#expiry = setTimeout(() => this.reset(), result.expires - Date.now());
+      this.#expiry = setTimeout(() => this.reset(), result.ttlMs);
       this.#emit('solve', { token: result.token, expires: result.expires });
       return result.token;
     } catch (error) {
@@ -108,7 +107,7 @@ export class KaputtWidget extends HTMLElement {
     this.#pending = null;
     clearTimeout(this.#expiry);
     this.token = null;
-    this.#expires = 0;
+    this.#deadline = 0;
     this.#field.value = '';
     this.#root.querySelector('.progress-ring-circle').style.strokeDashoffset = '87.96';
     this.#update('', 'Verify to continue');

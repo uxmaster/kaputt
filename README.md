@@ -103,7 +103,9 @@ checkmark, error state, and CSS customization variables (`--cap-*`), with kaputt
 branding. Its labels say “Verify to continue” and “Verified”: work does not prove
 humanity. It supports keyboard activation, a focus ring, live status, and reduced
 motion. A successful solve fills a hidden input named `kaputt-token` and emits a
-`solve` event. An expired token resets the widget. Reset also cancels any workers.
+`solve` event. The server supplies a relative `ttlMs` for browser timers, so an
+incorrect device clock does not block visitors. The widget resets when that timer
+elapses. The server always enforces the signed expiry. Reset also cancels any workers.
 After your application submits or consumes a token, call `widget.reset()`.
 
 A hidden input is not a security check or required-field validation. Your form
@@ -136,7 +138,10 @@ widget.redeemChallenge = async (proof, signal) => {
 Callbacks receive an `AbortSignal`. Forward it to your transport so resets and
 disconnects cancel requests. `solve()` resolves to the access token, rejects on
 failure, and shares pending work across concurrent callers. Other events are
-`progress` (`detail.progress`, 0–100, completed puzzles) and `reset`.
+`progress` (`detail.progress`, 0–100, completed puzzles) and `reset`. Listen on the
+widget itself: its events do not bubble into the form or window.
+Return the complete server responses from callbacks, including `ttlMs`.
+Deploy matching server and browser versions; the browser requires that field.
 
 For a strict same-origin CSP, allow your asset path in `script-src`, `worker-src`,
 `style-src`, and `connect-src`. HashWX needs `'wasm-unsafe-eval'` in `script-src`.
@@ -243,9 +248,10 @@ clocks consistent across instances.
 
 ### `generateChallenge(secret, options = {})`
 
-Returns `{ token, challenges: [{ c, d, n }], expires }`. `expires` is Unix time in
-milliseconds. The signature authenticates every puzzle and its scope and expiry;
-validation trusts the signed token, never client-supplied difficulty fields.
+Returns `{ token, challenges: [{ c, d, n }], expires, ttlMs }`. `expires` is Unix
+time in milliseconds; `ttlMs` is the relative lifetime for browser timers.
+The signature authenticates every puzzle and its scope and expiry; validation
+trusts the signed token, never client-supplied difficulty fields.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -268,7 +274,7 @@ canonical unsigned decimal strings in `[0, 2^64 - 1]`, never JSON numbers.
 `options`: `{ scope = '', consumeNonce, tokenTtlMs = 1200000 }`.
 `consumeNonce` is required. Token TTL is 1–86400000 ms.
 
-Returns `{ success: true, token, expires }` or `{ success: false, reason }`.
+Returns `{ success: true, token, expires, ttlMs }` or `{ success: false, reason }`.
 Malformed client input returns failure. Invalid application configuration and
 WASM initialization errors throw; handle these at your HTTP boundary.
 

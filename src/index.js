@@ -66,7 +66,7 @@ async function consume(options, data) {
 /** Issue signed, stateless HashWX puzzles. Keep the secret on the server.
  * @param {string|Uint8Array} secret
  * @param {{scope?: string, expiresMs?: number, difficulty?: number, count?: number, noncesPerHash?: number}} [options]
- * @returns {{token: string, challenges: Puzzle[], expires: number}}
+ * @returns {{token: string, challenges: Puzzle[], expires: number, ttlMs: number}}
  */
 export function generateChallenge(secret, options = {}) {
   checkSecret(secret);
@@ -77,21 +77,22 @@ export function generateChallenge(secret, options = {}) {
   const challenges = Array.from({ length: count }, () => ({
     c: randomBytes(32).toString('hex'), d: Math.max(1, Math.round(difficulty / count)), n: noncesPerHash,
   }));
-  const expires = Date.now() + ttl(options.expiresMs ?? 600_000);
+  const ttlMs = ttl(options.expiresMs ?? 600_000);
+  const expires = Date.now() + ttlMs;
   const token = sign(secret, { v: 1, purpose: 'challenge', id: randomBytes(16).toString('hex'), scope, expires, challenges });
-  return { token, challenges, expires };
+  return { token, challenges, expires, ttlMs };
 }
 
 /** Verify work against signed parameters, consume the challenge once, and issue a scoped token.
  * @param {string|Uint8Array} secret
  * @param {unknown} body Untrusted JSON: {token, solutions: [{nonce: decimalString}]}.
  * @param {ValidationOptions} options
- * @returns {Promise<{success: boolean, reason?: string, token?: string, expires?: number}>}
+ * @returns {Promise<{success: boolean, reason?: string, token?: string, expires?: number, ttlMs?: number}>}
  */
 export async function validateChallenge(secret, body, options) {
   checkSecret(secret);
   optionsCheck(options);
-  const tokenTtl = ttl(options.tokenTtlMs ?? 1_200_000);
+  const ttlMs = ttl(options.tokenTtlMs ?? 1_200_000);
   if (!body || typeof body !== 'object') return fail('invalid_body');
   const data = open(secret, body.token, 'challenge', options.scope ?? '');
   if (!data) return fail('invalid_token');
@@ -110,8 +111,8 @@ export async function validateChallenge(secret, body, options) {
   }
   const failure = await consume(options, data);
   if (failure) return failure;
-  const expires = Date.now() + tokenTtl;
-  return { success: true, expires, token: sign(secret, {
+  const expires = Date.now() + ttlMs;
+  return { success: true, expires, ttlMs, token: sign(secret, {
     v: 1, purpose: 'access', id: randomBytes(16).toString('hex'), scope: data.scope, expires,
   }) };
 }

@@ -16,10 +16,26 @@ const server = Bun.serve({
   async fetch(req) {
     try {
       const url = new URL(req.url);
-      if (url.pathname === '/') return new Response(
-        '<!doctype html><html lang="en"><title>Kaputt test</title><script type="module" src="/src/widget.js"></script><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form></html>',
+      if (url.pathname === '/' || url.pathname === '/upgrade') return new Response(
+        '<!doctype html><html lang="en"><title>Kaputt test</title><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form>' +
+        (url.pathname === '/upgrade' ? '<script src="/preconfigure.js"></script>' : '') +
+        '<script type="module" src="/src/widget.js"></script></html>',
         { headers: { ...headers, 'Content-Type': 'text/html' } },
       );
+      if (url.pathname === '/preconfigure.js') return new Response(`
+        const widget = document.querySelector('kaputt-widget');
+        widget.removeAttribute('api-endpoint');
+        window.configuredBeforeUpgrade = !customElements.get('kaputt-widget');
+        window.callbackCalls = [];
+        widget.createChallenge = async signal => {
+          window.callbackCalls.push('challenge');
+          return (await fetch('/pow/challenge', { method: 'POST', signal })).json();
+        };
+        widget.redeemChallenge = async (proof, signal) => {
+          window.callbackCalls.push('redeem');
+          return (await fetch('/pow/redeem', { method: 'POST', signal, body: JSON.stringify(proof) })).json();
+        };
+      `, { headers: { ...headers, 'Content-Type': 'text/javascript' } });
       if (url.pathname === '/pow/challenge') return Response.json(
         generateChallenge(secret, { difficulty: 128, count: 4, noncesPerHash: 16, scope: 'test' }), { headers },
       );
@@ -63,23 +79,23 @@ try {
     return same;
   }), true);
 
-  // A suspended tab can delay the expiry timer; solve() must check the timestamp itself.
+  // Delayed timers must not make solve() return a token past its relative lifetime.
   assert.equal(await page.evaluate(async () => {
     const widget = document.querySelector('kaputt-widget');
     const oldToken = widget.token;
-    const now = Date.now;
+    const now = performance.now;
     let issued = 0;
     widget.createChallenge = async signal => {
       issued++;
-      Date.now = now;
+      performance.now = now;
       const response = await fetch('/pow/challenge', { method: 'POST', signal });
       return response.json();
     };
     try {
-      Date.now = () => now() + 86_400_000;
+      performance.now = () => now.call(performance) + 86_400_000;
       const newToken = await widget.solve();
       return issued === 1 && newToken !== oldToken;
-    } finally { Date.now = now; widget.createChallenge = null; }
+    } finally { performance.now = now; widget.createChallenge = null; }
   }), true);
 
   // An error listener may reset synchronously; the next solve must start fresh work.
@@ -99,6 +115,53 @@ try {
     try { return rejected && !!await widget.solve() && calls === 2; }
     finally { widget.createChallenge = null; }
   }), true);
+
+  // Widget-local error/reset events must not reach native form or window handlers.
+  assert.deepEqual(await page.evaluate(async () => {
+    const widget = document.querySelector('kaputt-widget');
+    widget.reset();
+    const counts = { widgetError: 0, widgetReset: 0, windowError: 0, formReset: 0 };
+    const onWindowError = () => counts.windowError++;
+    const onFormReset = () => counts.formReset++;
+    window.addEventListener('error', onWindowError);
+    const form = widget.closest('form');
+    form.addEventListener('reset', onFormReset);
+    widget.addEventListener('error', () => counts.widgetError++, { once: true });
+    widget.addEventListener('reset', () => counts.widgetReset++, { once: true });
+    widget.createChallenge = () => { throw new Error('expected failure'); };
+    try { await widget.solve(); } catch {}
+    widget.reset();
+    widget.createChallenge = null;
+    window.removeEventListener('error', onWindowError);
+    form.removeEventListener('reset', onFormReset);
+    return counts;
+  }), { widgetError: 1, widgetReset: 1, windowError: 0, formReset: 0 });
+
+  const upgradePage = await browser.newPage();
+  await upgradePage.goto(`http://127.0.0.1:${server.port}/upgrade`);
+  await upgradePage.waitForFunction(() => customElements.get('kaputt-widget'));
+  assert.equal(await upgradePage.evaluate(() => window.configuredBeforeUpgrade), true);
+  const upgradeToken = await upgradePage.locator('kaputt-widget').evaluate(widget => widget.solve());
+  assert.deepEqual(await upgradePage.evaluate(() => window.callbackCalls), ['challenge', 'redeem']);
+  assert.equal((await validateToken(secret, upgradeToken, options)).success, true);
+  await upgradePage.close();
+
+  for (const offset of [15 * 60_000, 30 * 60_000, -2 * 86_400_000]) {
+    const skewPage = await browser.newPage();
+    await skewPage.addInitScript(offset => {
+      const now = Date.now;
+      Date.now = () => now() + offset;
+    }, offset);
+    await skewPage.goto(`http://127.0.0.1:${server.port}`);
+    await skewPage.waitForFunction(() => customElements.get('kaputt-widget'));
+    const token = await skewPage.locator('kaputt-widget').evaluate(async widget => {
+      const token = await widget.solve();
+      Date.now = () => 0;
+      return token === await widget.solve() ? token : null;
+    });
+    assert.equal((await validateToken(secret, token, options)).success, true);
+    await skewPage.close();
+  }
 
   // Direct solver and application callbacks use the same protocol as the endpoint flow.
   const direct = generateChallenge(secret, { difficulty: 64, count: 2, scope: 'test' });
@@ -127,6 +190,11 @@ try {
     await new Promise(resolve => setTimeout(resolve, 100));
     widget.reset();
     try { await promise; return false; } catch { return widget.token === null; }
+  }, hard), true);
+  assert.equal(await page.evaluate(async challenge => {
+    const { solveChallenges } = await import('/src/client.js');
+    try { await solveChallenges({ ...challenge, ttlMs: 25 }); return false; }
+    catch (error) { return error.message === 'Challenge expired'; }
   }, hard), true);
   await page.waitForFunction(() => document.querySelector('kaputt-widget').shadowRoot.querySelector('button').disabled === false);
   await new Promise((resolve, reject) => {
@@ -161,7 +229,7 @@ try {
   await page.waitForFunction(() => document.querySelector('kaputt-widget').token);
   assert.deepEqual(errors, []);
   assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.port}/`)));
-  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, expiry, synchronous error reset, error and retry, same-origin CSP.');
+  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, synchronous error reset, error and retry, same-origin CSP.');
 } finally {
   await browser?.close();
   await server.stop(true);
