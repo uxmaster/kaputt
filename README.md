@@ -2,7 +2,7 @@
 
 **CAPTCHA ist kaputt.**
 
-HashWX proof of work for your own JavaScript application. Inspired by
+HashWX proof of work for your own Bun application. Inspired by
 [Cap](https://github.com/tiagozip/cap), with the same widget styling and a smaller
 scope: make requests cost work. No browser instrumentation, fingerprinting,
 behavior scoring, tracking, external services, or alternative PoW algorithms.
@@ -15,13 +15,14 @@ PoW is a cost barrier, not proof that someone is human. Bots can solve it too.
 
 ## Install
 
-Install from GitHub (the package is not published to npm):
+Install from GitHub:
 
 ```sh
-npm install github:uxmaster/kaputt
+bun add github:uxmaster/kaputt
 ```
 
-Server: Node.js 22+ or Bun with `node:crypto` and `node:fs/promises` support.
+Server: Bun 1.4.4+. WASM loading uses `Bun.file`; cryptography uses Bun's
+implementation of `node:crypto`.
 Browser: ES modules, module workers, WebAssembly, BigInt, and Web Crypto in a
 secure context (HTTPS, or localhost for development). Browsers with WebAssembly
 disabled cannot solve HashWX; there is no weaker fallback protocol.
@@ -37,7 +38,7 @@ the server, shared by all application instances. For example, generate one with
 import { generateChallenge, validateChallenge, validateToken } from 'kaputt';
 import { consumeNonce } from './your-store.js';
 
-const secret = process.env.KAPUTT_SECRET;
+const secret = Bun.env.KAPUTT_SECRET;
 const policy = { scope: 'signup', consumeNonce };
 
 // POST /pow/challenge — return this object as JSON.
@@ -175,11 +176,13 @@ for shared, durable protection.
 
 ### Redis
 
-With a connected Node Redis client (`redis`):
+Use Bun's built-in Redis client (`REDIS_URL`), with no client dependency:
 
 ```js
+import { redis } from 'bun';
+
 const consumeNonce = async (key, ttlMs) => {
-  return await redis.set(key, '1', { NX: true, PX: Math.ceil(ttlMs) }) === 'OK';
+  return await redis.send('SET', [key, '1', 'NX', 'PX', String(Math.ceil(ttlMs))]) === 'OK';
 };
 ```
 
@@ -187,32 +190,46 @@ Do not implement `GET` followed by `SET`; concurrent requests would both pass.
 Configure persistence to retain live replay keys through restarts if tokens
 remain valid across restarts.
 
-### PostgreSQL
+### MySQL
 
-With a connected `pg` pool:
+Use Bun's built-in SQL client with `DATABASE_URL=mysql://user:password@localhost:3306/app`:
 
 ```sql
 CREATE TABLE kaputt_used (
-  key text PRIMARY KEY,
-  expires_at timestamptz NOT NULL
-);
+  nonce_key VARBINARY(64) PRIMARY KEY,
+  expires_at BIGINT UNSIGNED NOT NULL,
+  INDEX (expires_at)
+) ENGINE=InnoDB;
 ```
 
 ```js
+import { sql, SQL } from 'bun';
+
 const consumeNonce = async (key, ttlMs) => {
-  const expires = new Date(Date.now() + ttlMs);
-  const result = await pool.query(`
-    INSERT INTO kaputt_used (key, expires_at) VALUES ($1, $2)
-    ON CONFLICT (key) DO NOTHING RETURNING key
-  `, [key, expires]);
-  return result.rowCount === 1;
+  const expires = Date.now() + ttlMs;
+  try {
+    await sql`
+      INSERT INTO kaputt_used (nonce_key, expires_at) VALUES (${key}, ${expires})
+    `;
+    return true;
+  } catch (error) {
+    if (error instanceof SQL.MySQLError && error.errno === 1062) return false;
+    throw error;
+  }
 };
 ```
 
+The primary key makes the insert atomic. Only a duplicate-key error returns
+`false`; other database errors propagate and validation returns `storage_error`.
+`expires_at` stores Unix time in milliseconds, avoiding timezone conversions.
 Periodically delete expired rows:
-`DELETE FROM kaputt_used WHERE expires_at <= now()`.
-Keeping an expired row longer is safe; it only uses space. Set the SQL database
-and application clocks consistently.
+
+```js
+await sql`DELETE FROM kaputt_used WHERE expires_at <= ${Date.now()}`;
+```
+
+Keeping an expired row longer is safe; it only uses space. Keep application
+clocks consistent across instances.
 
 ## API
 
@@ -271,16 +288,16 @@ The library deliberately makes no promises about detecting automated browsers.
 ## Development
 
 ```sh
-npm ci
-npm test
-npx playwright install chromium
-npm run test:browser
-npm pack --dry-run
+bun install --frozen-lockfile
+bun test
+bunx --bun playwright install chromium
+bun run test:browser
+bun pm pack --dry-run
 ```
 
-`CHROME_PATH=/path/to/chrome npm run test:browser` can use an installed Chrome.
-The browser check runs a temporary loopback server only for tests. It covers the
-real WASM worker flow, keyboard UX, Cap dimensions, one-use tokens, cancellation,
+`CHROME_PATH=/path/to/chrome bun run test:browser` can use an installed Chrome.
+The browser check uses `Bun.serve` for a temporary loopback server only for tests.
+It covers the real WASM worker flow, keyboard UX, Cap dimensions, one-use tokens, cancellation,
 error recovery, callbacks, and same-origin CSP.
 
 ## Credits and licenses

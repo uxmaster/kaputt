@@ -1,11 +1,11 @@
 {
   "name": "kaputt",
   "version": "0.1.0",
-  "description": "CAPTCHA ist kaputt. HashWX proof of work for your JavaScript application.",
+  "description": "CAPTCHA ist kaputt. HashWX proof of work for your Bun application.",
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22"
+    "bun": ">=1.4.4"
   },
   "exports": {
     ".": "./src/index.js",
@@ -22,8 +22,8 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node --test test/*.test.js",
-    "test:browser": "node test/browser.js"
+    "test": "bun test",
+    "test:browser": "bun test/browser.js"
   },
   "repository": {
     "type": "git",
@@ -31,5 +31,6 @@
   },
   "devDependencies": {
     "playwright": "1.65.1"
-  }
+  },
+  "packageManager": "bun@1.4.4"
 }

@@ -1,13 +1,12 @@
-import { test } from 'node:test';
+import { test } from 'bun:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { generateChallenge, validateChallenge, validateToken } from '../src/index.js';
 import { createRuntime, parseNonce, seedFor, U64_MAX } from '../src/hashwx.js';
 import { consumeNonce } from '../examples/memory.js';
 
 const secret = 'test-secret-with-at-least-32-bytes';
-const wasm = await readFile(new URL('../src/hashwx.wasm', import.meta.url));
+const wasm = await Bun.file(new URL('../src/hashwx.wasm', import.meta.url)).bytes();
 const module = await WebAssembly.compile(wasm);
 const opts = { scope: 'signup', consumeNonce };
 async function solve(challenge) {

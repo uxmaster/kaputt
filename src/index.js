@@ -1,5 +1,4 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { createRuntime, integer, parseNonce, seedFor, U64_MAX, validSpec } from './hashwx.js';
 
 /** @typedef {{c: string, d: number, n: number}} Puzzle */
@@ -11,7 +10,7 @@ import { createRuntime, integer, parseNonce, seedFor, U64_MAX, validSpec } from 
 const MAX_TTL = 86_400_000;
 let runtime;
 async function ready() {
-  runtime ??= readFile(new URL('./hashwx.wasm', import.meta.url))
+  runtime ??= Bun.file(new URL('./hashwx.wasm', import.meta.url)).arrayBuffer()
     .then(bytes => WebAssembly.compile(bytes)).then(module => createRuntime(module))
     .catch(error => { runtime = undefined; throw error; });
   return runtime;

@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { generateChallenge, validateChallenge, validateToken } from '../src/index.js';
 import { consumeNonce } from '../examples/memory.js';
@@ -10,39 +8,39 @@ const options = { scope: 'test', consumeNonce };
 const contentTypes = { js: 'text/javascript', css: 'text/css', wasm: 'application/wasm' };
 const errors = [];
 const requests = [];
-const server = createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url, 'http://localhost');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self'; img-src 'self' data:; connect-src 'self'");
-    if (url.pathname === '/') {
-      res.setHeader('Content-Type', 'text/html');
-      return res.end('<!doctype html><html lang="en"><title>Kaputt test</title><script type="module" src="/src/widget.js"></script><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form></html>');
-    }
-    if (url.pathname === '/pow/challenge') {
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify(generateChallenge(secret, { difficulty: 128, count: 4, noncesPerHash: 16, scope: 'test' })));
-    }
-    if (url.pathname === '/pow/redeem') {
-      let body = '';
-      for await (const part of req) { body += part; if (body.length > 32768) throw new Error('Body too large'); }
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify(await validateChallenge(secret, JSON.parse(body), options)));
-    }
-    if (/^\/src\/[a-z.-]+$/.test(url.pathname)) {
-      res.setHeader('Content-Type', contentTypes[url.pathname.split('.').pop()] || 'text/plain');
-      return res.end(await readFile(new URL(`..${url.pathname}`, import.meta.url)));
-    }
-    res.statusCode = 404; res.end();
-  } catch (error) { res.statusCode = 500; res.end(error.message); }
+const headers = {
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self'; img-src 'self' data:; connect-src 'self'",
+};
+const server = Bun.serve({
+  hostname: '127.0.0.1', port: 0, maxRequestBodySize: 32768,
+  async fetch(req) {
+    try {
+      const url = new URL(req.url);
+      if (url.pathname === '/') return new Response(
+        '<!doctype html><html lang="en"><title>Kaputt test</title><script type="module" src="/src/widget.js"></script><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form></html>',
+        { headers: { ...headers, 'Content-Type': 'text/html' } },
+      );
+      if (url.pathname === '/pow/challenge') return Response.json(
+        generateChallenge(secret, { difficulty: 128, count: 4, noncesPerHash: 16, scope: 'test' }), { headers },
+      );
+      if (url.pathname === '/pow/redeem') return Response.json(
+        await validateChallenge(secret, await req.json(), options), { headers },
+      );
+      if (/^\/src\/[a-z.-]+$/.test(url.pathname)) return new Response(
+        Bun.file(new URL(`..${url.pathname}`, import.meta.url)),
+        { headers: { ...headers, 'Content-Type': contentTypes[url.pathname.split('.').pop()] || 'text/plain' } },
+      );
+      return new Response('Not found', { status: 404, headers });
+    } catch (error) { return new Response(error.message, { status: 500, headers }); }
+  },
 });
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 let browser;
 try {
   browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined });
   const page = await browser.newPage({ reducedMotion: 'reduce' });
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => requests.push(request.url()));
-  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  await page.goto(`http://127.0.0.1:${server.port}`);
   await page.waitForFunction(() => customElements.get('kaputt-widget'));
   assert.equal(await page.getByRole('button', { name: 'Verify to continue', exact: true }).count(), 1);
   const trigger = page.locator('kaputt-widget').getByRole('button');
@@ -162,9 +160,9 @@ try {
   await trigger.click();
   await page.waitForFunction(() => document.querySelector('kaputt-widget').token);
   assert.deepEqual(errors, []);
-  assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.address().port}/`)));
+  assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.port}/`)));
   console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, expiry, synchronous error reset, error and retry, same-origin CSP.');
 } finally {
   await browser?.close();
-  await new Promise(resolve => server.close(resolve));
+  await server.stop(true);
 }
