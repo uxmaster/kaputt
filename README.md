@@ -98,7 +98,7 @@ mapping. Serve `.js` as JavaScript, `.css` as CSS and `.wasm` as
 </form>
 ```
 
-The widget preserves Cap's 260 × 58 px layout, checkbox, progress ring,
+The widget keeps Cap 0.1.34's 230 × 58 px look, checkbox, progress ring,
 checkmark, error state, and CSS customization variables (`--cap-*`), with kaputt
 branding. Its labels say “Verify to continue” and “Verified”: work does not prove
 humanity. It supports keyboard activation, a focus ring, live status, and reduced
@@ -109,9 +109,8 @@ elapses. The server always enforces the signed expiry. Reset also cancels any wo
 After your application submits or consumes a token, call `widget.reset()`.
 
 Labels are attributes; any you omit keep the English default. Changing an
-attribute updates the visible label. Labels too long for one line switch to two
-smaller (12 px) lines, so the 260 × 58 px box never grows; keep each label within
-those two lines (about 50 characters), longer text is clipped.
+attribute updates the visible label. Like in Cap, a label too long for one line
+wraps onto a second line; keep it within two lines (about 40 characters).
 
 ```html
 <kaputt-widget api-endpoint="/pow"

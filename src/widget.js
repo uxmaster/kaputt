@@ -45,8 +45,6 @@ export class KaputtWidget extends HTMLElement {
     this.#box = this.#root.querySelector('.captcha');
     this.#trigger = this.#root.querySelector('button');
     this.#label = this.#root.querySelector('.label');
-    // Refit when a hidden widget is shown: its width was 0 while hidden.
-    new ResizeObserver(() => this.#fit()).observe(this.#label.parentElement);
     this.#field.type = 'hidden';
     this.#trigger.addEventListener('click', () => { this.solve().catch(() => {}); });
   }
@@ -61,18 +59,11 @@ export class KaputtWidget extends HTMLElement {
   #emit(type, detail = {}) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
-  /** Long (e.g. translated) labels drop to two smaller lines instead of being clipped. */
-  #fit() {
-    const wrapper = this.#label.parentElement;
-    wrapper.classList.remove('long');
-    wrapper.classList.toggle('long', this.#label.scrollWidth > wrapper.clientWidth);
-  }
   #update(state, key) {
     if (state) this.#box.dataset.state = state;
     else delete this.#box.dataset.state;
     this.#key = key;
     this.#label.textContent = this.getAttribute(`label-${key}`) || LABELS[key];
-    this.#fit();
     this.#trigger.disabled = state === 'verifying' || state === 'done';
     this.#trigger.setAttribute('aria-busy', String(state === 'verifying'));
   }

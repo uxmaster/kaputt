@@ -80,7 +80,7 @@ try {
   assert.equal((await validateToken(secret, token, options)).success, true);
   assert.equal((await validateToken(secret, token, options)).success, false);
   assert.equal(await page.locator('input[name="kaputt-token"]').inputValue(), token);
-  assert.equal(await page.locator('.captcha').evaluate(el => getComputedStyle(el).width), '260px');
+  assert.equal(await page.locator('.captcha').evaluate(el => getComputedStyle(el).width), '230px');
   assert.equal(await page.locator('.captcha').evaluate(el => getComputedStyle(el).height), '58px');
   assert.equal(await trigger.isDisabled(), true);
   assert.equal(await page.locator('.label').textContent(), 'Verified');
@@ -275,25 +275,10 @@ try {
     const results = [];
     for (const widget of document.querySelectorAll('kaputt-widget')) {
       try { await widget.solve(); } catch {}
-      const label = widget.shadowRoot.querySelector('.label'), wrapper = label.parentElement;
-      const fits = label.scrollWidth <= wrapper.clientWidth && label.offsetHeight <= wrapper.clientHeight;
-      results.push(label.textContent, widget.shadowRoot.querySelector('.captcha').dataset.state, fits);
+      results.push(widget.shadowRoot.querySelector('.label').textContent, widget.shadowRoot.querySelector('.captcha').dataset.state);
     }
     return [...results, customFetches].join('|');
-  }), 'Włącz WebAssembly. Bez tego weryfikacja nie zadziała.|error|true|Verification needs WebAssembly. Please enable it.|error|true|0');
-  // A long label on a widget shown only later (hidden-until-submit) must refit once visible.
-  assert.equal(await noWasm.evaluate(async () => {
-    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const widget = document.getElementById('a');
-    widget.style.display = 'none';
-    await frames(); // hidden since page load, as in a show-on-submit form
-    widget.reset();
-    try { await widget.solve(); } catch {}
-    const whileHidden = widget.shadowRoot.querySelector('.label-wrapper').classList.contains('long');
-    widget.style.display = '';
-    await frames();
-    return !whileHidden && widget.shadowRoot.querySelector('.label-wrapper').classList.contains('long');
-  }), true);
+  }), 'Włącz WebAssembly. Bez tego weryfikacja nie zadziała.|error|Verification needs WebAssembly. Please enable it.|error|0');
   await noWasm.close();
 
   const blocked = await browser.newPage({ reducedMotion: 'reduce' });
@@ -309,7 +294,7 @@ try {
 
   assert.deepEqual(errors, []);
   assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.port}/`)));
-  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, label attribute changes, custom fetch, WebAssembly disabled or blocked by CSP, long-label fit, synchronous error reset, error and retry, same-origin CSP.');
+  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, label attribute changes, custom fetch, WebAssembly disabled or blocked by CSP, synchronous error reset, error and retry, same-origin CSP.');
 } finally {
   await browser?.close();
   await server.stop(true);
