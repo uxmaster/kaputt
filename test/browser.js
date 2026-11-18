@@ -8,6 +8,7 @@ const options = { scope: 'test', consumeNonce };
 const contentTypes = { js: 'text/javascript', css: 'text/css', wasm: 'application/wasm' };
 const errors = [];
 const requests = [];
+let customHeaders = 0;
 const headers = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self'; img-src 'self' data:; connect-src 'self'",
 };
@@ -22,6 +23,16 @@ const server = Bun.serve({
         '<script type="module" src="/src/widget.js"></script></html>',
         { headers: { ...headers, 'Content-Type': 'text/html' } },
       );
+      if (url.pathname === '/i18n') return new Response(
+        '<!doctype html><html lang="pl"><meta charset="utf-8"><title>Kaputt i18n</title><form><kaputt-widget id="a" api-endpoint="/pow" label-initial="Jestem człowiekiem" label-verifying="Sprawdzam..." label-solved="Gotowe" label-error="Błąd" label-wasm-disabled="Włącz WebAssembly. Bez tego weryfikacja nie zadziała."></kaputt-widget><kaputt-widget id="b" api-endpoint="/pow"></kaputt-widget></form>' +
+        '<script src="/custom-fetch.js"></script><script type="module" src="/src/widget.js"></script></html>',
+        { headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' } },
+      );
+      if (url.pathname === '/custom-fetch.js') return new Response(`
+        window.customFetches = 0;
+        window.KAPUTT_CUSTOM_FETCH = (url, options) => { customFetches++; return fetch(url, { ...options, headers: { ...options.headers, 'x-token': 'x' } }); };
+      `, { headers: { ...headers, 'Content-Type': 'text/javascript' } });
+      if (url.pathname.startsWith('/pow/') && req.headers.get('x-token')) customHeaders++;
       if (url.pathname === '/preconfigure.js') return new Response(`
         const widget = document.querySelector('kaputt-widget');
         widget.removeAttribute('api-endpoint');
@@ -227,9 +238,56 @@ try {
   await page.unroute('**/pow/redeem');
   await trigger.click();
   await page.waitForFunction(() => document.querySelector('kaputt-widget').token);
+  // Custom labels and a global custom fetch for api-endpoint requests.
+  const i18n = await browser.newPage({ reducedMotion: 'reduce' });
+  i18n.on('pageerror', error => errors.push(error.message));
+  await i18n.goto(`http://127.0.0.1:${server.port}/i18n`);
+  await i18n.waitForFunction(() => customElements.get('kaputt-widget'));
+  const label = id => i18n.locator(`#${id} .label`).textContent();
+  assert.equal(await label('a'), 'Jestem człowiekiem');
+  assert.equal(await label('b'), 'Verify to continue');
+  const before = customHeaders;
+  const tokenA = await i18n.evaluate(() => document.getElementById('a').solve());
+  assert.equal((await validateToken(secret, tokenA, options)).success, true);
+  assert.equal(await label('a'), 'Gotowe');
+  assert.equal(await i18n.evaluate(() => customFetches), 2);
+  assert.equal(customHeaders - before, 2);
+  await i18n.close();
+
+  // Without WebAssembly the widget says so instead of a generic error, and makes no request.
+  const noWasm = await browser.newPage({ reducedMotion: 'reduce' });
+  noWasm.on('pageerror', error => errors.push(error.message));
+  await noWasm.addInitScript(() => { delete globalThis.WebAssembly; });
+  await noWasm.goto(`http://127.0.0.1:${server.port}/i18n`);
+  await noWasm.waitForFunction(() => customElements.get('kaputt-widget'));
+  assert.equal(await noWasm.evaluate(async () => {
+    const results = [];
+    for (const widget of document.querySelectorAll('kaputt-widget')) {
+      try { await widget.solve(); } catch {}
+      const label = widget.shadowRoot.querySelector('.label'), wrapper = label.parentElement;
+      const fits = label.scrollWidth <= wrapper.clientWidth && label.offsetHeight <= wrapper.clientHeight;
+      results.push(label.textContent, widget.shadowRoot.querySelector('.captcha').dataset.state, fits);
+    }
+    return [...results, customFetches].join('|');
+  }), 'Włącz WebAssembly. Bez tego weryfikacja nie zadziała.|error|true|Verification needs WebAssembly. Please enable it.|error|true|0');
+  // A long label on a widget shown only later (hidden-until-submit) must refit once visible.
+  assert.equal(await noWasm.evaluate(async () => {
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const widget = document.getElementById('a');
+    widget.style.display = 'none';
+    await frames(); // hidden since page load, as in a show-on-submit form
+    widget.reset();
+    try { await widget.solve(); } catch {}
+    const whileHidden = widget.shadowRoot.querySelector('.label-wrapper').classList.contains('long');
+    widget.style.display = '';
+    await frames();
+    return !whileHidden && widget.shadowRoot.querySelector('.label-wrapper').classList.contains('long');
+  }), true);
+  await noWasm.close();
+
   assert.deepEqual(errors, []);
   assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.port}/`)));
-  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, synchronous error reset, error and retry, same-origin CSP.');
+  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, custom fetch, WebAssembly disabled, long-label fit, synchronous error reset, error and retry, same-origin CSP.');
 } finally {
   await browser?.close();
   await server.stop(true);

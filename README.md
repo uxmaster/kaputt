@@ -108,6 +108,31 @@ incorrect device clock does not block visitors. The widget resets when that time
 elapses. The server always enforces the signed expiry. Reset also cancels any workers.
 After your application submits or consumes a token, call `widget.reset()`.
 
+Labels are attributes; any you omit keep the English default. Labels too long for
+one line switch to two smaller lines, so the 260 × 58 px box never grows.
+
+```html
+<kaputt-widget api-endpoint="/pow"
+  label-initial="Jestem człowiekiem"
+  label-verifying="Sprawdzam..."
+  label-solved="Gotowe"
+  label-error="Błąd. Spróbuj ponownie."
+  label-wasm-disabled="Włącz WebAssembly, bez tego weryfikacja nie zadziała."
+></kaputt-widget>
+```
+
+If the browser has WebAssembly disabled (for example Safari Lockdown Mode), the
+widget makes no request and shows `label-wasm-disabled` in its error state.
+Without WebAssembly verification cannot work at all.
+
+To add headers or credentials to the widget's `api-endpoint` requests, define a
+fetch-compatible function anywhere on the page, before or after the module loads:
+
+```js
+window.KAPUTT_CUSTOM_FETCH = (url, options) =>
+  fetch(url, { ...options, headers: { ...options.headers, 'x-token': 'x' } });
+```
+
 A hidden input is not a security check or required-field validation. Your form
 code can call `await widget.solve()` before submitting; the server must always
 call `validateToken` before the protected action.

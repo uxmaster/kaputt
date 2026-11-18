@@ -137,6 +137,17 @@
   white-space: nowrap;
 }
 
+.label-wrapper.long .label {
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.label-wrapper.long::before,
+.label-wrapper.long::after {
+  display: none;
+}
+
 .checkbox .progress-ring {
   display: none;
   width: 100%;

@@ -2,7 +2,14 @@
 import { solveChallenges } from './client.js';
 import { integer } from './hashwx.js';
 
+const LABELS = {
+  initial: 'Verify to continue', verifying: 'Verifying...', solved: 'Verified',
+  error: 'Error. Try again.', 'wasm-disabled': 'Verification needs WebAssembly. Please enable it.',
+};
+
 /** Cap's visual widget, with HashWX only. Configure callbacks or an application-owned endpoint.
+ * Labels come from label-initial, label-verifying, label-solved, label-error and label-wasm-disabled.
+ * Endpoint requests use window.KAPUTT_CUSTOM_FETCH when defined (fetch-compatible signature).
  * Emits progress, solve ({token, expires}), error ({message}), and reset events.
  * @property {null|((signal: AbortSignal) => Promise<object>)} [createChallenge] Optional transport callback.
  * @property {null|((proof: object, signal: AbortSignal) => Promise<object>)} [redeemChallenge] Optional transport callback.
@@ -32,6 +39,8 @@ export class KaputtWidget extends HTMLElement {
     this.#box = this.#root.querySelector('.captcha');
     this.#trigger = this.#root.querySelector('button');
     this.#label = this.#root.querySelector('.label');
+    // Refit when a hidden widget is shown: its width was 0 while hidden.
+    new ResizeObserver(() => this.#fit()).observe(this.#label.parentElement);
     this.#field.type = 'hidden';
     this.#trigger.addEventListener('click', () => { this.solve().catch(() => {}); });
   }
@@ -39,23 +48,33 @@ export class KaputtWidget extends HTMLElement {
   connectedCallback() {
     this.#field.name = this.getAttribute('name') || 'kaputt-token';
     this.append(this.#field);
+    if (!this.#box.dataset.state) this.#update('', this.#text('initial'));
   }
   disconnectedCallback() { this.reset(); }
 
   #emit(type, detail = {}) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
+  /** Long (e.g. translated) labels drop to two smaller lines instead of being clipped. */
+  #fit() {
+    const wrapper = this.#label.parentElement;
+    wrapper.classList.remove('long');
+    wrapper.classList.toggle('long', this.#label.scrollWidth > wrapper.clientWidth);
+  }
+  #text(key) { return this.getAttribute(`label-${key}`) || LABELS[key]; }
   #update(state, label) {
     if (state) this.#box.dataset.state = state;
     else delete this.#box.dataset.state;
     this.#label.textContent = label;
+    this.#fit();
     this.#trigger.disabled = state === 'verifying' || state === 'done';
     this.#trigger.setAttribute('aria-busy', String(state === 'verifying'));
   }
   async #request(route, body, signal) {
     const endpoint = this.getAttribute('api-endpoint');
     if (!endpoint) throw new Error('Set api-endpoint or provide challenge callbacks');
-    const response = await fetch(`${endpoint.replace(/\/$/, '')}/${route}`, {
+    const request = globalThis.KAPUTT_CUSTOM_FETCH || fetch;
+    const response = await request(`${endpoint.replace(/\/$/, '')}/${route}`, {
       method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`Kaputt request failed: ${response.status}`);
@@ -70,15 +89,18 @@ export class KaputtWidget extends HTMLElement {
     const controller = new AbortController();
     this.#controller = controller;
     const { signal } = controller;
-    this.#update('verifying', 'Verifying...');
+    this.#update('verifying', this.#text('verifying'));
     this.#pending = Promise.resolve().then(() => this.#execute(signal)).finally(() => {
       if (this.#controller === controller) { this.#pending = null; this.#controller = null; }
     });
     return this.#pending;
   }
   async #execute(signal) {
+    // Lockdown modes remove the global; without WASM the proof can never be solved, so skip the network.
+    const wasm = typeof globalThis.WebAssembly?.compile === 'function';
     try {
       signal.throwIfAborted();
+      if (!wasm) throw new Error('WebAssembly is disabled');
       const challenge = await (this.createChallenge ? this.createChallenge(signal) : this.#request('challenge', {}, signal));
       signal.throwIfAborted();
       const proof = await solveChallenges(challenge, { signal, onProgress: progress => {
@@ -91,12 +113,12 @@ export class KaputtWidget extends HTMLElement {
         !integer(result.ttlMs, 1, 86_400_000)) throw new Error('Proof of work was rejected');
       this.token = this.#field.value = result.token;
       this.#deadline = performance.now() + result.ttlMs;
-      this.#update('done', 'Verified');
+      this.#update('done', this.#text('solved'));
       this.#expiry = setTimeout(() => this.reset(), result.ttlMs);
       this.#emit('solve', { token: result.token, expires: result.expires });
       return result.token;
     } catch (error) {
-      if (!signal.aborted) { this.#update('error', 'Error. Try again.'); this.#emit('error', { message: error.message }); }
+      if (!signal.aborted) { this.#update('error', this.#text(wasm ? 'error' : 'wasm-disabled')); this.#emit('error', { message: error.message }); }
       throw error;
     }
   }
@@ -110,7 +132,7 @@ export class KaputtWidget extends HTMLElement {
     this.#deadline = 0;
     this.#field.value = '';
     this.#root.querySelector('.progress-ring-circle').style.strokeDashoffset = '87.96';
-    this.#update('', 'Verify to continue');
+    this.#update('', this.#text('initial'));
     this.#emit('reset');
   }
 }
