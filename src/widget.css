@@ -175,33 +175,6 @@
   cursor: default;
 }
 
-.credits {
-  position: absolute;
-  inset-block-end: 10px;
-  inset-inline-end: 10px;
-  font-size: 8px !important;
-  color: var(--cap-color, #212121);
-  opacity: 0.45 !important;
-  text-decoration: underline;
-  text-underline-offset: 1.5px;
-  z-index: 2;
-  display: inline-flex !important;
-  align-items: center;
-  border-radius: 4px;
-}
-
-.captcha .credits {
-  display: inline-flex !important;
-  visibility: visible !important;
-  pointer-events: all !important;
-}
-
-.credits:focus-visible {
-  outline: 2px solid var(--cap-focus-ring, #0066cc);
-  outline-offset: 2px;
-  opacity: 1 !important;
-}
-
 @media (forced-colors: active) {
   .captcha {
     border-color: CanvasText;
@@ -209,8 +182,7 @@
   .checkbox {
     border-color: CanvasText;
   }
-  .captcha-trigger:focus-visible,
-  .credits:focus-visible {
+  .captcha-trigger:focus-visible {
     outline-color: Highlight;
   }
   .progress-ring-bg {
@@ -218,9 +190,6 @@
   }
   .progress-ring-circle {
     stroke: CanvasText;
-  }
-  .credits {
-    opacity: 1 !important;
   }
 }
 

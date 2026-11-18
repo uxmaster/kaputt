@@ -40,7 +40,6 @@ export class KaputtWidget extends HTMLElement {
           <div class="checkbox" part="checkbox" aria-hidden="true"><svg class="progress-ring" viewBox="0 0 32 32"><circle class="progress-ring-bg" cx="16" cy="16" r="14"></circle><circle class="progress-ring-circle" cx="16" cy="16" r="14"></circle></svg></div>
           <p part="label" class="label-wrapper"><span id="label" class="label" role="status" aria-live="polite">Verify to continue</span></p>
         </button>
-        <a class="credits" href="https://github.com/uxmaster/kaputt" target="_blank" rel="noopener" title="CAPTCHA ist kaputt">kaputt</a>
       </div>`;
     this.#box = this.#root.querySelector('.captcha');
     this.#trigger = this.#root.querySelector('button');

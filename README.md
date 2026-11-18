@@ -99,7 +99,7 @@ mapping. Serve `.js` as JavaScript, `.css` as CSS and `.wasm` as
 ```
 
 The widget keeps Cap 0.1.34's 230 × 58 px look, checkbox, progress ring,
-checkmark, error state, and CSS customization variables (`--cap-*`), with kaputt
+checkmark, error state, and CSS customization variables (`--cap-*`), without
 branding. Its labels say “Verify to continue” and “Verified”: work does not prove
 humanity. It supports keyboard activation, a focus ring, live status, and reduced
 motion. A successful solve fills a hidden input named `kaputt-token` and emits a
