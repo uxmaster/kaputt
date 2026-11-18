@@ -108,8 +108,10 @@ incorrect device clock does not block visitors. The widget resets when that time
 elapses. The server always enforces the signed expiry. Reset also cancels any workers.
 After your application submits or consumes a token, call `widget.reset()`.
 
-Labels are attributes; any you omit keep the English default. Labels too long for
-one line switch to two smaller lines, so the 260 × 58 px box never grows.
+Labels are attributes; any you omit keep the English default. Changing an
+attribute updates the visible label. Labels too long for one line switch to two
+smaller (12 px) lines, so the 260 × 58 px box never grows; keep each label within
+those two lines (about 50 characters), longer text is clipped.
 
 ```html
 <kaputt-widget api-endpoint="/pow"
@@ -121,8 +123,8 @@ one line switch to two smaller lines, so the 260 × 58 px box never grows.
 ></kaputt-widget>
 ```
 
-If the browser has WebAssembly disabled (for example Safari Lockdown Mode), the
-widget makes no request and shows `label-wasm-disabled` in its error state.
+If WebAssembly is disabled or blocked (for example Safari Lockdown Mode, or a CSP
+without `'wasm-unsafe-eval'`), the widget makes no request and shows `label-wasm-disabled` in its error state.
 Without WebAssembly verification cannot work at all.
 
 To add headers or credentials to the widget's `api-endpoint` requests, define a

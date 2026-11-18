@@ -26,7 +26,9 @@ const server = Bun.serve({
       if (url.pathname === '/i18n') return new Response(
         '<!doctype html><html lang="pl"><meta charset="utf-8"><title>Kaputt i18n</title><form><kaputt-widget id="a" api-endpoint="/pow" label-initial="Jestem człowiekiem" label-verifying="Sprawdzam..." label-solved="Gotowe" label-error="Błąd" label-wasm-disabled="Włącz WebAssembly. Bez tego weryfikacja nie zadziała."></kaputt-widget><kaputt-widget id="b" api-endpoint="/pow"></kaputt-widget></form>' +
         '<script src="/custom-fetch.js"></script><script type="module" src="/src/widget.js"></script></html>',
-        { headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' } },
+        { headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8',
+          // ?nowasm: a CSP without 'wasm-unsafe-eval' keeps the WebAssembly global but blocks compilation.
+          ...url.searchParams.has('nowasm') && { 'Content-Security-Policy': headers['Content-Security-Policy'].replace(" 'wasm-unsafe-eval'", '') } } },
       );
       if (url.pathname === '/custom-fetch.js') return new Response(`
         window.customFetches = 0;
@@ -252,6 +254,15 @@ try {
   assert.equal(await label('a'), 'Gotowe');
   assert.equal(await i18n.evaluate(() => customFetches), 2);
   assert.equal(customHeaders - before, 2);
+  // Changing a label attribute updates the shown label, also on a hidden widget.
+  assert.equal(await i18n.evaluate(() => {
+    const a = document.getElementById('a'), b = document.getElementById('b');
+    a.setAttribute('label-solved', 'Zrobione');
+    b.style.display = 'none';
+    b.setAttribute('label-initial', 'Cześć');
+    b.style.display = '';
+    return [a, b].map(widget => widget.shadowRoot.querySelector('.label').textContent).join();
+  }), 'Zrobione,Cześć');
   await i18n.close();
 
   // Without WebAssembly the widget says so instead of a generic error, and makes no request.
@@ -285,9 +296,20 @@ try {
   }), true);
   await noWasm.close();
 
+  const blocked = await browser.newPage({ reducedMotion: 'reduce' });
+  blocked.on('pageerror', error => errors.push(error.message));
+  await blocked.goto(`http://127.0.0.1:${server.port}/i18n?nowasm`);
+  await blocked.waitForFunction(() => customElements.get('kaputt-widget'));
+  assert.equal(await blocked.evaluate(async () => {
+    const widget = document.getElementById('a');
+    try { await widget.solve(); } catch {}
+    return [typeof WebAssembly, widget.shadowRoot.querySelector('.label').textContent, customFetches].join('|');
+  }), 'object|Włącz WebAssembly. Bez tego weryfikacja nie zadziała.|0');
+  await blocked.close();
+
   assert.deepEqual(errors, []);
   assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.port}/`)));
-  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, custom fetch, WebAssembly disabled, long-label fit, synchronous error reset, error and retry, same-origin CSP.');
+  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, label attribute changes, custom fetch, WebAssembly disabled or blocked by CSP, long-label fit, synchronous error reset, error and retry, same-origin CSP.');
 } finally {
   await browser?.close();
   await server.stop(true);

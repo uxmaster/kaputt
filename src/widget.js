@@ -2,6 +2,10 @@
 import { solveChallenges } from './client.js';
 import { integer } from './hashwx.js';
 
+// The smallest valid module: compiling it fails when WASM is absent or blocked (Lockdown Mode, CSP).
+const wasmAvailable = () => {
+  try { return !!new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])); } catch { return false; }
+};
 const LABELS = {
   initial: 'Verify to continue', verifying: 'Verifying...', solved: 'Verified',
   error: 'Error. Try again.', 'wasm-disabled': 'Verification needs WebAssembly. Please enable it.',
@@ -15,7 +19,9 @@ const LABELS = {
  * @property {null|((proof: object, signal: AbortSignal) => Promise<object>)} [redeemChallenge] Optional transport callback.
  */
 export class KaputtWidget extends HTMLElement {
+  static observedAttributes = Object.keys(LABELS).map(key => `label-${key}`);
   token = null;
+  #key = 'initial';
   #controller;
   #pending;
   #expiry;
@@ -48,8 +54,8 @@ export class KaputtWidget extends HTMLElement {
   connectedCallback() {
     this.#field.name = this.getAttribute('name') || 'kaputt-token';
     this.append(this.#field);
-    if (!this.#box.dataset.state) this.#update('', this.#text('initial'));
   }
+  attributeChangedCallback() { this.#update(this.#box.dataset.state, this.#key); }
   disconnectedCallback() { this.reset(); }
 
   #emit(type, detail = {}) {
@@ -61,11 +67,11 @@ export class KaputtWidget extends HTMLElement {
     wrapper.classList.remove('long');
     wrapper.classList.toggle('long', this.#label.scrollWidth > wrapper.clientWidth);
   }
-  #text(key) { return this.getAttribute(`label-${key}`) || LABELS[key]; }
-  #update(state, label) {
+  #update(state, key) {
     if (state) this.#box.dataset.state = state;
     else delete this.#box.dataset.state;
-    this.#label.textContent = label;
+    this.#key = key;
+    this.#label.textContent = this.getAttribute(`label-${key}`) || LABELS[key];
     this.#fit();
     this.#trigger.disabled = state === 'verifying' || state === 'done';
     this.#trigger.setAttribute('aria-busy', String(state === 'verifying'));
@@ -89,15 +95,15 @@ export class KaputtWidget extends HTMLElement {
     const controller = new AbortController();
     this.#controller = controller;
     const { signal } = controller;
-    this.#update('verifying', this.#text('verifying'));
+    this.#update('verifying', 'verifying');
     this.#pending = Promise.resolve().then(() => this.#execute(signal)).finally(() => {
       if (this.#controller === controller) { this.#pending = null; this.#controller = null; }
     });
     return this.#pending;
   }
   async #execute(signal) {
-    // Lockdown modes remove the global; without WASM the proof can never be solved, so skip the network.
-    const wasm = typeof globalThis.WebAssembly?.compile === 'function';
+    // Without WASM the proof can never be solved, so skip the network.
+    const wasm = wasmAvailable();
     try {
       signal.throwIfAborted();
       if (!wasm) throw new Error('WebAssembly is disabled');
@@ -113,12 +119,12 @@ export class KaputtWidget extends HTMLElement {
         !integer(result.ttlMs, 1, 86_400_000)) throw new Error('Proof of work was rejected');
       this.token = this.#field.value = result.token;
       this.#deadline = performance.now() + result.ttlMs;
-      this.#update('done', this.#text('solved'));
+      this.#update('done', 'solved');
       this.#expiry = setTimeout(() => this.reset(), result.ttlMs);
       this.#emit('solve', { token: result.token, expires: result.expires });
       return result.token;
     } catch (error) {
-      if (!signal.aborted) { this.#update('error', this.#text(wasm ? 'error' : 'wasm-disabled')); this.#emit('error', { message: error.message }); }
+      if (!signal.aborted) { this.#update('error', wasm ? 'error' : 'wasm-disabled'); this.#emit('error', { message: error.message }); }
       throw error;
     }
   }
@@ -132,7 +138,7 @@ export class KaputtWidget extends HTMLElement {
     this.#deadline = 0;
     this.#field.value = '';
     this.#root.querySelector('.progress-ring-circle').style.strokeDashoffset = '87.96';
-    this.#update('', this.#text('initial'));
+    this.#update('', 'initial');
     this.#emit('reset');
   }
 }
