@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { generateChallenge, validateChallenge, validateToken } from '../src/index.js';
 import { consumeNonce } from '../examples/memory.js';
 
@@ -12,6 +14,15 @@ let customHeaders = 0;
 const headers = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self'; img-src 'self' data:; connect-src 'self'",
 };
+// The single-file build, as an application would bundle src/browser.js for its site.
+const single = mkdtempSync(`${tmpdir()}/kaputt-single-`);
+const built = await Bun.build({
+  entrypoints: [new URL('../src/browser.js', import.meta.url).pathname],
+  outdir: single, naming: 'widget.js', minify: true, target: 'browser',
+  define: { KAPUTT_VERSION: '"t1"' },
+});
+assert(built.success, built.logs.join('\n'));
+const singleRequests = [];
 const server = Bun.serve({
   hostname: '127.0.0.1', port: 0, maxRequestBodySize: 32768,
   async fetch(req) {
@@ -54,6 +65,19 @@ const server = Bun.serve({
       );
       if (url.pathname === '/pow/redeem') return Response.json(
         await validateChallenge(secret, await req.json(), options), { headers },
+      );
+      if (url.pathname === '/single') return new Response(
+        '<!doctype html><html lang="en"><title>Kaputt single file</title><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form>' +
+        '<script type="module" src="/single/widget.js?v=t1"></script></html>',
+        { headers: { ...headers, 'Content-Type': 'text/html' } },
+      );
+      if (url.pathname.startsWith('/single/')) singleRequests.push(url.pathname + url.search);
+      if (url.pathname === '/single/widget.js') return new Response(Bun.file(`${single}/widget.js`), {
+        headers: { ...headers, 'Content-Type': 'text/javascript', 'Cache-Control': 'max-age=3600' },
+      });
+      if (/^\/single\/(widget\.css|hashwx\.wasm)$/.test(url.pathname)) return new Response(
+        Bun.file(new URL(`../src/${url.pathname.slice(8)}`, import.meta.url)),
+        { headers: { ...headers, 'Content-Type': contentTypes[url.pathname.split('.').pop()] } },
       );
       if (/^\/src\/[a-z.-]+$/.test(url.pathname)) return new Response(
         Bun.file(new URL(`..${url.pathname}`, import.meta.url)),
@@ -183,6 +207,16 @@ try {
     return solveChallenges(challenge);
   }, direct);
   assert.equal((await validateChallenge(secret, proof, options)).success, true);
+  // Many puzzles start one worker per core (at most 16), each solving several puzzles in turn.
+  let workersStarted = 0;
+  page.on('worker', () => workersStarted++);
+  const many = generateChallenge(secret, { difficulty: 3000, count: 30, scope: 'test' });
+  const manyProof = await page.evaluate(async challenge => {
+    const { solveChallenges } = await import('/src/client.js');
+    return solveChallenges(challenge);
+  }, many);
+  assert.equal((await validateChallenge(secret, manyProof, options)).success, true);
+  assert.equal(workersStarted, Math.min(await page.evaluate(() => navigator.hardwareConcurrency), 16, 30));
 
   const defaultChallenge = generateChallenge(secret, { scope: 'test' });
   const started = performance.now();
@@ -292,10 +326,22 @@ try {
   }), 'object|Włącz WebAssembly. Bez tego weryfikacja nie zadziała.|0');
   await blocked.close();
 
+  // The single-file build: the server sends one JavaScript file for the page and all its workers, and the
+  // CSS and WASM are requested with the build's version; it solves under the same CSP.
+  const singlePage = await browser.newPage({ reducedMotion: 'reduce' });
+  singlePage.on('pageerror', error => errors.push(error.message));
+  await singlePage.goto(`http://127.0.0.1:${server.port}/single`);
+  await singlePage.waitForFunction(() => customElements.get('kaputt-widget'));
+  const singleToken = await singlePage.evaluate(() => document.querySelector('kaputt-widget').solve());
+  assert.equal((await validateToken(secret, singleToken, options)).success, true);
+  assert.deepEqual(singleRequests.sort(), ['/single/hashwx.wasm?v=t1', '/single/widget.css?v=t1', '/single/widget.js?v=t1']);
+  await singlePage.close();
+
   assert.deepEqual(errors, []);
   assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.port}/`)));
-  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, label attribute changes, custom fetch, WebAssembly disabled or blocked by CSP, synchronous error reset, error and retry, same-origin CSP.');
+  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, label attribute changes, custom fetch, WebAssembly disabled or blocked by CSP, synchronous error reset, error and retry, same-origin CSP, single-file build.');
 } finally {
   await browser?.close();
   await server.stop(true);
+  rmSync(single, { recursive: true, force: true });
 }

@@ -11,6 +11,7 @@
     ".": "./src/index.js",
     "./client": "./src/client.js",
     "./widget": "./src/widget.js",
+    "./browser": "./src/browser.js",
     "./src/*": "./src/*"
   },
   "files": [

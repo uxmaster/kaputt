@@ -1,15 +1,19 @@
 import { integer, validSpec } from './hashwx.js';
 
+// The single-file build (src/browser.js bundled with --define KAPUTT_VERSION='"<version>"') is its own worker script
+// and asks for its WASM with ?v=<version>, so a new build never meets a cached old file.
+const assetQuery = typeof KAPUTT_VERSION === 'undefined' ? '' : `?v=${KAPUTT_VERSION}`;
+
 let modulePromise;
 function loadModule() {
-  modulePromise ??= fetch(new URL('./hashwx.wasm', import.meta.url)).then(async response => {
+  modulePromise ??= fetch(new URL(`./hashwx.wasm${assetQuery}`, import.meta.url)).then(async response => {
     if (!response.ok) throw new Error(`HashWX download failed: ${response.status}`);
     return WebAssembly.compile(await response.arrayBuffer());
   }).catch(error => { modulePromise = undefined; throw error; });
   return modulePromise;
 }
 
-/** Solve HashWX in module workers, without inspecting the browser environment.
+/** Solve HashWX in module workers, one per CPU core (at most 16, like Cap), each reused for its share of puzzles.
  * @param {{token: string, expires: number, ttlMs: number, challenges: import('./index.js').Puzzle[]}} challenge
  * @param {{signal?: AbortSignal, onProgress?: (percent: number) => void}} [options]
  * @returns {Promise<{token: string, solutions: {nonce: string}[]}>}
@@ -19,6 +23,7 @@ export async function solveChallenges(challenge, { signal, onProgress = () => {}
     !Number.isSafeInteger(challenge.expires) || !integer(challenge.ttlMs, 1, 86_400_000) ||
     !Array.isArray(challenge.challenges) || !integer(challenge.challenges.length, 1, 64) ||
     !challenge.challenges.every(validSpec)) throw new Error('Invalid challenge');
+  signal?.throwIfAborted();
   const workers = new Set();
   let timer;
   let abort;
@@ -35,25 +40,27 @@ export async function solveChallenges(challenge, { signal, onProgress = () => {}
     let completed = 0;
     onProgress(0);
     async function run() {
+      // literal new Worker(new URL(...)) so application bundlers recognise the worker in the modular build
+      const worker = typeof KAPUTT_VERSION === 'undefined'
+        ? new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })
+        : new Worker(import.meta.url, { type: 'module' });
+      workers.add(worker);
       while (next < solutions.length) {
         const index = next++;
-        const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-        workers.add(worker);
-        try {
-          solutions[index] = await new Promise((resolve, reject) => {
-            worker.onmessage = ({ data }) => {
-              if (data.error) reject(new Error(data.error));
-              else if (typeof data.nonce === 'string') resolve({ nonce: data.nonce });
-            };
-            worker.onerror = event => reject(new Error(event.message || 'HashWX worker failed'));
-            worker.onmessageerror = () => reject(new Error('HashWX worker message failed'));
-            worker.postMessage({ module, spec: challenge.challenges[index] });
-          });
-        } finally { worker.terminate(); workers.delete(worker); }
+        solutions[index] = await new Promise((resolve, reject) => {
+          worker.onmessage = ({ data }) => {
+            if (data.error) reject(new Error(data.error));
+            else if (typeof data.nonce === 'string') resolve({ nonce: data.nonce });
+          };
+          worker.onerror = event => reject(new Error(event.message || 'HashWX worker failed'));
+          worker.onmessageerror = () => reject(new Error('HashWX worker message failed'));
+          worker.postMessage({ module, spec: challenge.challenges[index] });
+        });
         onProgress(Math.round(++completed / solutions.length * 100));
       }
     }
-    await Promise.race([Promise.all(Array.from({ length: Math.min(4, solutions.length) }, run)), stopped]);
+    const lanes = Math.min(navigator.hardwareConcurrency || 4, 16, solutions.length);
+    await Promise.race([Promise.all(Array.from({ length: lanes }, run)), stopped]);
     return { token: challenge.token, solutions };
   } finally {
     clearTimeout(timer);

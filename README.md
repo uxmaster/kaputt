@@ -193,8 +193,23 @@ const result = await yourApi.redeemPowChallenge(proof);
 
 With a bundler, import `solveChallenges` from `kaputt/client` and the widget from
 `kaputt/widget`. Ensure the bundler preserves the module-worker and relative WASM
-and CSS assets, or use the direct static mapping above. The solver uses at most
-four workers, independent of browser identity or reported hardware properties.
+and CSS assets, or use the direct static mapping above. The solver starts one
+module worker per CPU core (`navigator.hardwareConcurrency`, at most 16), each
+solving its share of puzzles in turn.
+
+To load the widget as **one JavaScript file**, bundle `src/browser.js` with a
+version; the bundle is also its own worker script. Serve it with `widget.css` and
+`hashwx.wasm` from `src/` in the same directory. The bundle requests both with
+`?v=<version>`; load it the same way, so a long cache lifetime is safe:
+
+```sh
+bun build node_modules/kaputt/src/browser.js --minify --define KAPUTT_VERSION='"1a2b3c4"' --outfile public/kaputt/widget.js
+cp node_modules/kaputt/src/widget.css node_modules/kaputt/src/hashwx.wasm public/kaputt/
+```
+
+```html
+<script type="module" src="/kaputt/widget.js?v=1a2b3c4"></script>
+```
 
 ## Storage examples
 
