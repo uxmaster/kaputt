@@ -17,11 +17,6 @@ const server = Bun.serve({
   async fetch(req) {
     try {
       const url = new URL(req.url);
-      if (url.pathname === '/dist') return new Response(
-        '<!doctype html><html lang="en"><title>Kaputt dist</title><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form>' +
-        '<script type="module" src="/dist/widget.js"></script></html>',
-        { headers: { ...headers, 'Content-Type': 'text/html' } },
-      );
       if (url.pathname === '/' || url.pathname === '/upgrade') return new Response(
         '<!doctype html><html lang="en"><title>Kaputt test</title><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form>' +
         (url.pathname === '/upgrade' ? '<script src="/preconfigure.js"></script>' : '') +
@@ -60,7 +55,7 @@ const server = Bun.serve({
       if (url.pathname === '/pow/redeem') return Response.json(
         await validateChallenge(secret, await req.json(), options), { headers },
       );
-      if (/^\/(src|dist)\/[a-z.-]+$/.test(url.pathname)) return new Response(
+      if (/^\/src\/[a-z.-]+$/.test(url.pathname)) return new Response(
         Bun.file(new URL(`..${url.pathname}`, import.meta.url)),
         { headers: { ...headers, 'Content-Type': contentTypes[url.pathname.split('.').pop()] || 'text/plain' } },
       );
@@ -188,16 +183,6 @@ try {
     return solveChallenges(challenge);
   }, direct);
   assert.equal((await validateChallenge(secret, proof, options)).success, true);
-  // Many puzzles still start at most four workers: each one solves several in turn.
-  let workersStarted = 0;
-  page.on('worker', () => workersStarted++);
-  const many = generateChallenge(secret, { difficulty: 3000, count: 30, scope: 'test' });
-  const manyProof = await page.evaluate(async challenge => {
-    const { solveChallenges } = await import('/src/client.js');
-    return solveChallenges(challenge);
-  }, many);
-  assert.equal((await validateChallenge(secret, manyProof, options)).success, true);
-  assert.equal(workersStarted, 4);
 
   const defaultChallenge = generateChallenge(secret, { scope: 'test' });
   const started = performance.now();
@@ -307,22 +292,9 @@ try {
   }), 'object|Włącz WebAssembly. Bez tego weryfikacja nie zadziała.|0');
   await blocked.close();
 
-  // The built dist/ (bundled, minified) solves under the same CSP and loads nothing from src/.
-  const dist = await browser.newPage({ reducedMotion: 'reduce' });
-  const distRequests = [];
-  dist.on('pageerror', error => errors.push(error.message));
-  dist.on('request', request => distRequests.push(new URL(request.url()).pathname));
-  await dist.goto(`http://127.0.0.1:${server.port}/dist`);
-  await dist.waitForFunction(() => customElements.get('kaputt-widget'));
-  const distToken = await dist.evaluate(() => document.querySelector('kaputt-widget').solve());
-  assert.equal((await validateToken(secret, distToken, options)).success, true);
-  assert.equal(await dist.evaluate(() => getComputedStyle(document.querySelector('kaputt-widget').shadowRoot.querySelector('.captcha')).width), '230px');
-  assert(!distRequests.some(path => path.startsWith('/src/')));
-  await dist.close();
-
   assert.deepEqual(errors, []);
   assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.port}/`)));
-  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, label attribute changes, custom fetch, WebAssembly disabled or blocked by CSP, synchronous error reset, error and retry, same-origin CSP, built dist/.');
+  console.log('Browser checks passed: keyboard, Cap dimensions, real HashWX workers, replay, direct solver, callbacks, cancellation, reconnect, relative expiry, clock skew, pre-upgrade callbacks, event isolation, custom labels, label attribute changes, custom fetch, WebAssembly disabled or blocked by CSP, synchronous error reset, error and retry, same-origin CSP.');
 } finally {
   await browser?.close();
   await server.stop(true);

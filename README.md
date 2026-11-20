@@ -84,25 +84,10 @@ idempotency for the business operation belong to your application.
 
 ## Widget
 
-Serve **all of `node_modules/kaputt/dist/`** at a same-origin path such as
+Serve **all of `node_modules/kaputt/src/`** at a same-origin path such as
 `/assets/kaputt/`, preserving filenames. Your HTTP framework or bundler owns this
 mapping. Serve `.js` as JavaScript, `.css` as CSS and `.wasm` as
 `application/wasm`. No CDN or network requests to Cap are used.
-
-`dist/` holds the browser files minified (`widget.js` and `worker.js` with their
-imports bundled), `widget.css` and `hashwx.wasm`, each with precompressed `.gz`
-and `.br` copies for nginx `gzip_static` / `brotli_static`:
-
-```nginx
-location /assets/kaputt/ {
-    alias /path/to/app/node_modules/kaputt/dist/;
-    gzip_static on;
-    brotli_static on;   # needs the ngx_brotli module
-}
-```
-
-`src/` works the same way unminified. After changing `src/`, run `bun run build`
-and commit `dist/`; CI fails when `dist/` is stale.
 
 ```html
 <script type="module" src="/assets/kaputt/widget.js"></script>
@@ -208,7 +193,7 @@ const result = await yourApi.redeemPowChallenge(proof);
 
 With a bundler, import `solveChallenges` from `kaputt/client` and the widget from
 `kaputt/widget`. Ensure the bundler preserves the module-worker and relative WASM
-and CSS assets, or serve `dist/` as above. The solver uses at most
+and CSS assets, or use the direct static mapping above. The solver uses at most
 four workers, independent of browser identity or reported hardware properties.
 
 ## Storage examples
