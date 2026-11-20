@@ -35,11 +35,12 @@ export async function solveChallenges(challenge, { signal, onProgress = () => {}
     let completed = 0;
     onProgress(0);
     async function run() {
-      while (next < solutions.length) {
-        const index = next++;
-        const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-        workers.add(worker);
-        try {
+      // one worker per lane, reused for its puzzles: a new worker per puzzle refetches worker.js each time
+      const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+      workers.add(worker);
+      try {
+        while (next < solutions.length) {
+          const index = next++;
           solutions[index] = await new Promise((resolve, reject) => {
             worker.onmessage = ({ data }) => {
               if (data.error) reject(new Error(data.error));
@@ -49,9 +50,9 @@ export async function solveChallenges(challenge, { signal, onProgress = () => {}
             worker.onmessageerror = () => reject(new Error('HashWX worker message failed'));
             worker.postMessage({ module, spec: challenge.challenges[index] });
           });
-        } finally { worker.terminate(); workers.delete(worker); }
-        onProgress(Math.round(++completed / solutions.length * 100));
-      }
+          onProgress(Math.round(++completed / solutions.length * 100));
+        }
+      } finally { worker.terminate(); workers.delete(worker); }
     }
     await Promise.race([Promise.all(Array.from({ length: Math.min(4, solutions.length) }, run)), stopped]);
     return { token: challenge.token, solutions };

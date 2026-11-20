@@ -188,6 +188,16 @@ try {
     return solveChallenges(challenge);
   }, direct);
   assert.equal((await validateChallenge(secret, proof, options)).success, true);
+  // Many puzzles still start at most four workers: each one solves several in turn.
+  let workersStarted = 0;
+  page.on('worker', () => workersStarted++);
+  const many = generateChallenge(secret, { difficulty: 3000, count: 30, scope: 'test' });
+  const manyProof = await page.evaluate(async challenge => {
+    const { solveChallenges } = await import('/src/client.js');
+    return solveChallenges(challenge);
+  }, many);
+  assert.equal((await validateChallenge(secret, manyProof, options)).success, true);
+  assert.equal(workersStarted, 4);
 
   const defaultChallenge = generateChallenge(secret, { scope: 'test' });
   const started = performance.now();
