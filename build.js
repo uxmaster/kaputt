@@ -13,6 +13,8 @@ if (!result.success) throw new AggregateError(result.logs, 'build failed');
 copyFileSync(new URL('./src/hashwx.wasm', import.meta.url), out + 'hashwx.wasm');
 for (const file of readdirSync(out)) {
   const data = readFileSync(out + file);
-  writeFileSync(out + file + '.gz', gzipSync(data, { level: 9 }));
+  const gz = gzipSync(data, { level: 9 });
+  gz[9] = 3; // gzip header OS byte: zlib writes 19 on macOS and 3 on Linux; fix it so CI can compare builds
+  writeFileSync(out + file + '.gz', gz);
   writeFileSync(out + file + '.br', brotliCompressSync(data, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }));
 }
