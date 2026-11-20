@@ -11,10 +11,12 @@
     ".": "./src/index.js",
     "./client": "./src/client.js",
     "./widget": "./src/widget.js",
-    "./src/*": "./src/*"
+    "./src/*": "./src/*",
+    "./dist/*": "./dist/*"
   },
   "files": [
     "src",
+    "dist",
     "examples",
     "vendor",
     "LICENSE",
@@ -22,6 +24,7 @@
     "README.md"
   ],
   "scripts": {
+    "build": "bun build.js",
     "test": "bun test",
     "test:browser": "bun test/browser.js"
   },
