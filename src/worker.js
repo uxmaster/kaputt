@@ -56,7 +56,7 @@ function createRuntime(module, compiled = false) {
 }
 
 let state; // one runtime per worker, reused for every puzzle it solves
-// The single-file build (src/browser.js) also evaluates this script in the page; only a worker listens.
+// The server imports this file for the runtime; only a worker listens.
 if (typeof DedicatedWorkerGlobalScope === 'function' && self instanceof DedicatedWorkerGlobalScope) {
   self.onmessage = async ({ data: { module, spec } }) => {
     try {

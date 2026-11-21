@@ -18,7 +18,7 @@ const headers = {
 const single = mkdtempSync(`${tmpdir()}/kaputt-single-`);
 const built = await Bun.build({
   entrypoints: [new URL('../src/browser.js', import.meta.url).pathname],
-  outdir: single, naming: 'widget.js', minify: true, target: 'browser', format: 'iife',
+  outdir: single, naming: 'widget.js', minify: true, target: 'browser',
   define: { KAPUTT_VERSION: '"t1"' },
 });
 assert(built.success, built.logs.join('\n'));
@@ -68,14 +68,14 @@ const server = Bun.serve({
       );
       if (url.pathname === '/single') return new Response(
         '<!doctype html><html lang="en"><title>Kaputt single file</title><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form>' +
-        '<script src="/single/widget.js?v=t1" defer></script></html>',
+        '<script type="module" src="/single/widget.js?v=t1"></script></html>',
         { headers: { ...headers, 'Content-Type': 'text/html' } },
       );
       if (url.pathname.startsWith('/single/')) singleRequests.push(url.pathname + url.search);
       if (url.pathname === '/single/widget.js') return new Response(Bun.file(`${single}/widget.js`), {
         headers: { ...headers, 'Content-Type': 'text/javascript', 'Cache-Control': 'max-age=3600' },
       });
-      if (/^\/single\/(widget\.css|hashwx\.wasm)$/.test(url.pathname)) return new Response(
+      if (/^\/single\/(worker\.js|widget\.css|hashwx\.wasm)$/.test(url.pathname)) return new Response(
         Bun.file(new URL(`../src/${url.pathname.slice(8)}`, import.meta.url)),
         { headers: { ...headers, 'Content-Type': contentTypes[url.pathname.split('.').pop()] } },
       );
@@ -335,7 +335,7 @@ try {
   }), 'object|Włącz WebAssembly. Bez tego weryfikacja nie zadziała.|0');
   await blocked.close();
 
-  // The single-file build: the server sends one JavaScript file for the page and all its workers, and the
+  // The single-file build: the server sends one JavaScript file for the page and the classic worker.js, and the
   // CSS and WASM are requested with the build's version; it solves under the same CSP.
   const singlePage = await browser.newPage({ reducedMotion: 'reduce' });
   singlePage.on('pageerror', error => errors.push(error.message));
@@ -344,7 +344,7 @@ try {
   await singlePage.waitForFunction(() => customElements.get('kaputt-widget'));
   const singleToken = await singlePage.evaluate(() => document.querySelector('kaputt-widget').solve());
   assert.equal((await validateToken(secret, singleToken, options)).success, true);
-  assert.deepEqual(singleRequests.sort(), ['/single/hashwx.wasm?v=t1', '/single/widget.css?v=t1', '/single/widget.js?v=t1']);
+  assert.deepEqual([...new Set(singleRequests)].sort(), ['/single/hashwx.wasm?v=t1', '/single/widget.css?v=t1', '/single/widget.js?v=t1', '/single/worker.js?v=t1']);
   await singlePage.close();
 
   assert.deepEqual(errors, []);

@@ -6,9 +6,8 @@ import { integer } from './hashwx.js';
 const wasmAvailable = () => {
   try { return !!new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])); } catch { return false; }
 };
-// The single-file build finds and asks for its CSS like client.js does for the WASM.
-const cssUrl = typeof KAPUTT_VERSION === 'undefined' ? new URL('./widget.css', import.meta.url)
-  : new URL(`./widget.css?v=${KAPUTT_VERSION}`, globalThis.document?.currentScript.src ?? location.href);
+// The single-file build asks for its CSS with ?v=<version>, like client.js does for the WASM.
+const assetQuery = typeof KAPUTT_VERSION === 'undefined' ? '' : `?v=${KAPUTT_VERSION}`;
 const LABELS = {
   initial: 'Verify to continue', verifying: 'Verifying...', solved: 'Verified',
   error: 'Error. Try again.', 'wasm-disabled': 'Verification needs WebAssembly. Please enable it.',
@@ -21,8 +20,7 @@ const LABELS = {
  * @property {null|((signal: AbortSignal) => Promise<object>)} [createChallenge] Optional transport callback.
  * @property {null|((proof: object, signal: AbortSignal) => Promise<object>)} [redeemChallenge] Optional transport callback.
  */
-// The single-file build also evaluates this module inside its solver workers, which have no DOM.
-export class KaputtWidget extends (globalThis.HTMLElement ?? class {}) {
+export class KaputtWidget extends HTMLElement {
   static observedAttributes = Object.keys(LABELS).map(key => `label-${key}`);
   token = null;
   #key = 'initial';
@@ -38,7 +36,7 @@ export class KaputtWidget extends (globalThis.HTMLElement ?? class {}) {
 
   constructor() {
     super();
-    this.#root.innerHTML = `<link rel="stylesheet" href="${cssUrl}">
+    this.#root.innerHTML = `<link rel="stylesheet" href="${new URL(`./widget.css${assetQuery}`, import.meta.url)}">
       <div class="captcha" role="group" aria-label="Kaputt proof of work">
         <button class="captcha-trigger" type="button" aria-labelledby="label">
           <div class="checkbox" part="checkbox" aria-hidden="true"><svg class="progress-ring" viewBox="0 0 32 32"><circle class="progress-ring-bg" cx="16" cy="16" r="14"></circle><circle class="progress-ring-circle" cx="16" cy="16" r="14"></circle></svg></div>
@@ -137,4 +135,4 @@ export class KaputtWidget extends (globalThis.HTMLElement ?? class {}) {
   }
 }
 
-if (globalThis.customElements && !customElements.get('kaputt-widget')) customElements.define('kaputt-widget', KaputtWidget);
+if (!customElements.get('kaputt-widget')) customElements.define('kaputt-widget', KaputtWidget);

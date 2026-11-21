@@ -196,19 +196,18 @@ const result = await yourApi.redeemPowChallenge(proof);
 The solver starts one classic worker per CPU core (`navigator.hardwareConcurrency`, at most 16), each
 solving its share of puzzles in turn.
 
-To load the widget as **one JavaScript file**, bundle `src/browser.js` as an IIFE with a
-version; the bundle is also its own worker script. Serve it with `widget.css` and
-`hashwx.wasm` from `src/` in the same directory. The bundle requests both with
-`?v=<version>`; load it the same way, so a long cache lifetime is safe. Load it as a
-classic script, not `type="module"`: it finds its directory from `document.currentScript`.
+To load the widget as **one page script**, bundle `src/browser.js` with a version.
+Serve it with `worker.js`, `widget.css` and `hashwx.wasm` from `src/` in the same
+directory. The bundle requests all three with `?v=<version>`; load it the same way,
+so a long cache lifetime is safe:
 
 ```sh
-bun build node_modules/kaputt/src/browser.js --format iife --minify --define KAPUTT_VERSION='"1a2b3c4"' --outfile public/kaputt/widget.js
-cp node_modules/kaputt/src/widget.css node_modules/kaputt/src/hashwx.wasm public/kaputt/
+bun build node_modules/kaputt/src/browser.js --minify --define KAPUTT_VERSION='"1a2b3c4"' --outfile public/kaputt/widget.js
+cp node_modules/kaputt/src/worker.js node_modules/kaputt/src/widget.css node_modules/kaputt/src/hashwx.wasm public/kaputt/
 ```
 
 ```html
-<script src="/kaputt/widget.js?v=1a2b3c4" defer></script>
+<script type="module" src="/kaputt/widget.js?v=1a2b3c4"></script>
 ```
 
 ## Storage examples

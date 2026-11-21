@@ -1,15 +1,12 @@
 import { integer, validSpec } from './hashwx.js';
 
-// The single-file build (src/browser.js bundled as IIFE with --define KAPUTT_VERSION='"<version>"') is a classic script and
-// its own worker script: it takes its URL from document.currentScript in the page and from location in a worker, and asks
-// for its WASM with ?v=<version>, so a new build never meets a cached old file.
-const script = typeof KAPUTT_VERSION === 'undefined' ? '' : globalThis.document?.currentScript.src ?? location.href;
+// The single-file build (src/browser.js bundled with --define KAPUTT_VERSION='"<version>"') asks for its WASM and worker
+// with ?v=<version>, so a new build never meets a cached old file.
+const assetQuery = typeof KAPUTT_VERSION === 'undefined' ? '' : `?v=${KAPUTT_VERSION}`;
 
 let modulePromise;
 function loadModule() {
-  modulePromise ??= fetch(typeof KAPUTT_VERSION === 'undefined'
-    ? new URL('./hashwx.wasm', import.meta.url)
-    : new URL(`./hashwx.wasm?v=${KAPUTT_VERSION}`, script)).then(async response => {
+  modulePromise ??= fetch(new URL(`./hashwx.wasm${assetQuery}`, import.meta.url)).then(async response => {
     if (!response.ok) throw new Error(`HashWX download failed: ${response.status}`);
     return WebAssembly.compile(await response.arrayBuffer());
   }).catch(error => { modulePromise = undefined; throw error; });
@@ -44,7 +41,7 @@ export async function solveChallenges(challenge, { signal, onProgress = () => {}
     onProgress(0);
     async function run() {
       // classic, not { type: 'module' }: Firefox before 114 cannot start module workers
-      const worker = typeof KAPUTT_VERSION === 'undefined' ? new Worker(new URL('./worker.js', import.meta.url)) : new Worker(script);
+      const worker = new Worker(new URL(`./worker.js${assetQuery}`, import.meta.url));
       workers.add(worker);
       while (next < solutions.length) {
         const index = next++;

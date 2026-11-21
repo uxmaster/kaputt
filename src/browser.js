@@ -1,4 +1,3 @@
-// Single-file browser entry. Bundle it with --format iife --define KAPUTT_VERSION='"<version>"': the bundle is a classic script and its own worker script,
-// and requests its CSS and WASM with ?v=<version>.
-import './worker.js';
+// Single-file browser entry: bundle it with --define KAPUTT_VERSION='"<version>"' and serve worker.js, widget.css and
+// hashwx.wasm from src/ next to it; the bundle requests them with ?v=<version>.
 export * from './widget.js';
