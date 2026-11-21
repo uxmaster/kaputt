@@ -2,7 +2,8 @@ import { test } from 'bun:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { generateChallenge, validateChallenge, validateToken } from '../src/index.js';
-import { createRuntime, parseNonce, seedFor, U64_MAX } from '../src/hashwx.js';
+import { parseNonce, U64_MAX } from '../src/hashwx.js';
+import { createRuntime, seedFor } from '../src/worker.js';
 import { consumeNonce } from '../examples/memory.js';
 
 const secret = 'test-secret-with-at-least-32-bytes';

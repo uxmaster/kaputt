@@ -31,7 +31,7 @@ bun add github:uxmaster/kaputt
 
 Server: Bun 1.4.4+. WASM loading uses `Bun.file`; cryptography uses Bun's
 implementation of `node:crypto`.
-Browser: ES modules, module workers, WebAssembly, BigInt, and Web Crypto in a
+Browser: ES modules, workers, WebAssembly, BigInt, and Web Crypto in a
 secure context (HTTPS, or localhost for development). Browsers with WebAssembly
 disabled cannot solve HashWX; there is no weaker fallback protocol.
 
@@ -85,9 +85,11 @@ idempotency for the business operation belong to your application.
 ## Widget
 
 Serve **all of `node_modules/kaputt/src/`** at a same-origin path such as
-`/assets/kaputt/`, preserving filenames. Your HTTP framework or bundler owns this
+`/assets/kaputt/`, preserving filenames. Your HTTP framework owns this
 mapping. Serve `.js` as JavaScript, `.css` as CSS and `.wasm` as
 `application/wasm`. No CDN or network requests to Cap are used.
+Serve each release from a new path or without long caching: browsers may otherwise
+keep an older `worker.js` next to a newer `client.js`.
 
 ```html
 <script type="module" src="/assets/kaputt/widget.js"></script>
@@ -191,24 +193,22 @@ const result = await yourApi.redeemPowChallenge(proof);
 // Submit result.token with your protected request if result.success is true.
 ```
 
-With a bundler, import `solveChallenges` from `kaputt/client` and the widget from
-`kaputt/widget`. Ensure the bundler preserves the module-worker and relative WASM
-and CSS assets, or use the direct static mapping above. The solver starts one
-module worker per CPU core (`navigator.hardwareConcurrency`, at most 16), each
+The solver starts one classic worker per CPU core (`navigator.hardwareConcurrency`, at most 16), each
 solving its share of puzzles in turn.
 
-To load the widget as **one JavaScript file**, bundle `src/browser.js` with a
+To load the widget as **one JavaScript file**, bundle `src/browser.js` as an IIFE with a
 version; the bundle is also its own worker script. Serve it with `widget.css` and
 `hashwx.wasm` from `src/` in the same directory. The bundle requests both with
-`?v=<version>`; load it the same way, so a long cache lifetime is safe:
+`?v=<version>`; load it the same way, so a long cache lifetime is safe. Load it as a
+classic script, not `type="module"`: it finds its directory from `document.currentScript`.
 
 ```sh
-bun build node_modules/kaputt/src/browser.js --minify --define KAPUTT_VERSION='"1a2b3c4"' --outfile public/kaputt/widget.js
+bun build node_modules/kaputt/src/browser.js --format iife --minify --define KAPUTT_VERSION='"1a2b3c4"' --outfile public/kaputt/widget.js
 cp node_modules/kaputt/src/widget.css node_modules/kaputt/src/hashwx.wasm public/kaputt/
 ```
 
 ```html
-<script type="module" src="/kaputt/widget.js?v=1a2b3c4"></script>
+<script src="/kaputt/widget.js?v=1a2b3c4" defer></script>
 ```
 
 ## Storage examples

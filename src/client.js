@@ -1,19 +1,22 @@
 import { integer, validSpec } from './hashwx.js';
 
-// The single-file build (src/browser.js bundled with --define KAPUTT_VERSION='"<version>"') is its own worker script
-// and asks for its WASM with ?v=<version>, so a new build never meets a cached old file.
-const assetQuery = typeof KAPUTT_VERSION === 'undefined' ? '' : `?v=${KAPUTT_VERSION}`;
+// The single-file build (src/browser.js bundled as IIFE with --define KAPUTT_VERSION='"<version>"') is a classic script and
+// its own worker script: it takes its URL from document.currentScript in the page and from location in a worker, and asks
+// for its WASM with ?v=<version>, so a new build never meets a cached old file.
+const script = typeof KAPUTT_VERSION === 'undefined' ? '' : globalThis.document?.currentScript.src ?? location.href;
 
 let modulePromise;
 function loadModule() {
-  modulePromise ??= fetch(new URL(`./hashwx.wasm${assetQuery}`, import.meta.url)).then(async response => {
+  modulePromise ??= fetch(typeof KAPUTT_VERSION === 'undefined'
+    ? new URL('./hashwx.wasm', import.meta.url)
+    : new URL(`./hashwx.wasm?v=${KAPUTT_VERSION}`, script)).then(async response => {
     if (!response.ok) throw new Error(`HashWX download failed: ${response.status}`);
     return WebAssembly.compile(await response.arrayBuffer());
   }).catch(error => { modulePromise = undefined; throw error; });
   return modulePromise;
 }
 
-/** Solve HashWX in module workers, one per CPU core (at most 16, like Cap), each reused for its share of puzzles.
+/** Solve HashWX in classic workers, one per CPU core (at most 16, like Cap), each reused for its share of puzzles.
  * @param {{token: string, expires: number, ttlMs: number, challenges: import('./index.js').Puzzle[]}} challenge
  * @param {{signal?: AbortSignal, onProgress?: (percent: number) => void}} [options]
  * @returns {Promise<{token: string, solutions: {nonce: string}[]}>}
@@ -40,10 +43,8 @@ export async function solveChallenges(challenge, { signal, onProgress = () => {}
     let completed = 0;
     onProgress(0);
     async function run() {
-      // literal new Worker(new URL(...)) so application bundlers recognise the worker in the modular build
-      const worker = typeof KAPUTT_VERSION === 'undefined'
-        ? new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })
-        : new Worker(import.meta.url, { type: 'module' });
+      // classic, not { type: 'module' }: Firefox before 114 cannot start module workers
+      const worker = typeof KAPUTT_VERSION === 'undefined' ? new Worker(new URL('./worker.js', import.meta.url)) : new Worker(script);
       workers.add(worker);
       while (next < solutions.length) {
         const index = next++;

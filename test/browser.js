@@ -18,7 +18,7 @@ const headers = {
 const single = mkdtempSync(`${tmpdir()}/kaputt-single-`);
 const built = await Bun.build({
   entrypoints: [new URL('../src/browser.js', import.meta.url).pathname],
-  outdir: single, naming: 'widget.js', minify: true, target: 'browser',
+  outdir: single, naming: 'widget.js', minify: true, target: 'browser', format: 'iife',
   define: { KAPUTT_VERSION: '"t1"' },
 });
 assert(built.success, built.logs.join('\n'));
@@ -68,7 +68,7 @@ const server = Bun.serve({
       );
       if (url.pathname === '/single') return new Response(
         '<!doctype html><html lang="en"><title>Kaputt single file</title><form><kaputt-widget api-endpoint="/pow"></kaputt-widget></form>' +
-        '<script type="module" src="/single/widget.js?v=t1"></script></html>',
+        '<script src="/single/widget.js?v=t1" defer></script></html>',
         { headers: { ...headers, 'Content-Type': 'text/html' } },
       );
       if (url.pathname.startsWith('/single/')) singleRequests.push(url.pathname + url.search);
@@ -87,10 +87,19 @@ const server = Bun.serve({
     } catch (error) { return new Response(error.message, { status: 500, headers }); }
   },
 });
+// Firefox before 114 throws on module workers; Chromium does too here, so only classic workers pass.
+const classicWorkersOnly = () => {
+  const NativeWorker = Worker;
+  globalThis.Worker = function Worker(url, options) {
+    if (options?.type === 'module') throw new TypeError('Module scripts are not supported on DedicatedWorker yet');
+    return new NativeWorker(url, options);
+  };
+};
 let browser;
 try {
   browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined });
   const page = await browser.newPage({ reducedMotion: 'reduce' });
+  await page.addInitScript(classicWorkersOnly);
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => requests.push(request.url()));
   await page.goto(`http://127.0.0.1:${server.port}`);
@@ -330,6 +339,7 @@ try {
   // CSS and WASM are requested with the build's version; it solves under the same CSP.
   const singlePage = await browser.newPage({ reducedMotion: 'reduce' });
   singlePage.on('pageerror', error => errors.push(error.message));
+  await singlePage.addInitScript(classicWorkersOnly);
   await singlePage.goto(`http://127.0.0.1:${server.port}/single`);
   await singlePage.waitForFunction(() => customElements.get('kaputt-widget'));
   const singleToken = await singlePage.evaluate(() => document.querySelector('kaputt-widget').solve());

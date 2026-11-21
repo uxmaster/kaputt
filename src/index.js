@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { createRuntime, integer, parseNonce, seedFor, U64_MAX, validSpec } from './hashwx.js';
+import { integer, parseNonce, U64_MAX, validSpec } from './hashwx.js';
+import { createRuntime, seedFor } from './worker.js';
 
 /** @typedef {{c: string, d: number, n: number}} Puzzle */
 /** @typedef {(key: string, ttlMs: number) => Promise<boolean>} ConsumeNonce
